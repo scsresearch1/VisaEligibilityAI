@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+
+  --color-navy-950: #040b14;
+  --color-navy-900: #0a1628;
+  --color-navy-800: #12243d;
+  --color-navy-700: #1a3354;
+  --color-navy-600: #234a72;
+
+  --color-gold-400: #d4a853;
+  --color-gold-500: #c49a3c;
+  --color-gold-600: #a67f2e;
+
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply font-sans antialiased text-slate-700 bg-slate-50;
+  }
+
+  ::selection {
+    @apply bg-navy-900/90 text-white;
+  }
+}
+
+@layer utilities {
+  .text-gradient-gold {
+    @apply bg-linear-to-r from-gold-400 via-gold-500 to-gold-600 bg-clip-text text-transparent;
+  }
+
+  .glass-panel {
+    @apply bg-white/70 backdrop-blur-xl border border-white/60 shadow-xl shadow-navy-900/5;
+  }
+
+  .glass-panel-dark {
+    @apply bg-navy-900/40 backdrop-blur-xl border border-white/10;
+  }
+
+  .mesh-gradient {
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(196, 154, 60, 0.15), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 0%, rgba(26, 51, 84, 0.4), transparent),
+      radial-gradient(ellipse 50% 30% at 0% 50%, rgba(18, 36, 61, 0.3), transparent);
+  }
+
+  .hero-grid {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+}
