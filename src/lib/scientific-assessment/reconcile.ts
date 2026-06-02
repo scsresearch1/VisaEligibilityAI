@@ -21,6 +21,8 @@ import type { CriterionEvidenceScore } from './score-criterion'
 import { isLlmOutputRequired } from '../llm/llm-output-policy'
 import { LlmOutputRequiredError } from '../llm/llm-output-policy'
 import { evidenceScoreToStrength } from './methodology'
+import { synthesizeGapsFromEvaluations } from './validate-llm-analysis'
+import type { VisaCategory } from '../../types/assessment'
 
 export interface LlmScientificAnalysis {
   profileFacts?: {
@@ -220,15 +222,7 @@ export function reconcileScientificAnalysis(
   }
 
   const ruleGaps = buildGapsFromAnalysis(partialState, profile)
-  let gaps: GapItem[]
-  if (llmOnly) {
-    gaps = llm.gaps.filter((g) => g.criterionId && VALID_CRITERION_IDS.has(g.criterionId)).slice(0, 14)
-    if (gaps.length === 0) {
-      throw new LlmOutputRequiredError('LLM returned no criterion gaps.')
-    }
-  } else {
-    gaps = mergeGaps(ruleGaps, llm.gaps)
-  }
+  const gaps = resolveAnalysisGaps(llm, ruleGaps, state.selectedCategories)
 
   const llmRecs = enrichRecommendations(llm.recommendations, profile)
 
@@ -263,17 +257,7 @@ export function reconcileScientificAnalysis(
   }
 
   let parsedAchievements: ParsedAchievement[]
-  if (llmOnly) {
-    if (llm.parsedAchievements.length === 0) {
-      throw new LlmOutputRequiredError('LLM returned no parsedAchievements.')
-    }
-    parsedAchievements = llm.parsedAchievements.map((a, i) => ({
-      ...a,
-      id: a.id || `pa-sci-${i}`,
-      confidence: clamp(a.confidence ?? 0.8, 0, 1),
-      domain: a.domain || profile.domains[0] || 'Professional',
-    }))
-  } else if (llm.parsedAchievements.length > 0) {
+  if (llm.parsedAchievements.length > 0) {
     parsedAchievements = llm.parsedAchievements.map((a, i) => ({
       ...a,
       id: a.id || `pa-sci-${i}`,
@@ -308,4 +292,35 @@ export function reconcileScientificAnalysis(
     recommendations,
     riskFlags,
   }
+}
+
+/** Prefer LLM gaps; synthesize from criterion evals or rubric when the model omits them. */
+function resolveAnalysisGaps(
+  llm: LlmScientificAnalysis,
+  ruleGaps: GapItem[],
+  categories: VisaCategory[],
+): GapItem[] {
+  const llmCriterionGaps = llm.gaps.filter(
+    (g) => g.criterionId && VALID_CRITERION_IDS.has(g.criterionId),
+  )
+  const llmOtherGaps = llm.gaps.filter((g) => !g.criterionId && (g.title?.trim().length ?? 0) > 5)
+
+  let gaps =
+    llmCriterionGaps.length > 0
+      ? llmCriterionGaps
+      : llmOtherGaps.length > 0
+        ? llmOtherGaps
+        : []
+
+  if (gaps.length === 0 && (llm.criterionEvaluations?.length ?? 0) > 0) {
+    gaps = synthesizeGapsFromEvaluations(llm.criterionEvaluations ?? [], categories)
+  }
+
+  if (gaps.length === 0) {
+    gaps = ruleGaps
+  } else {
+    gaps = mergeGaps(ruleGaps, gaps)
+  }
+
+  return gaps.slice(0, 14)
 }

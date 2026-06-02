@@ -87,6 +87,7 @@ export function buildScientificAnalysisSystemPromptCompact(categories: VisaCateg
     'Scientific EB-1 assessment. Output ONLY valid JSON.',
     `Pathways: ${categories.join(', ')}.`,
     'MUST include roadmapActions (6-10) with deliverableSpec — never omit. Also: criterionEvaluations, parsedAchievements, gaps, recommendations, riskFlags.',
+    'gaps: include at least one row per criterion with evidenceScore<56; every gap MUST include criterionId (e.g. eb1a-6) from the checklist.',
     'roadmapActions: papers→suggestedTitles; patents/product→outline+domain; match candidate field from profile.',
     'Evaluate ALL criterion ids in user checklist. profileEvidence must quote fact inventory. ±15 from BASE only with evidence.',
     'Schema (abbreviated):',

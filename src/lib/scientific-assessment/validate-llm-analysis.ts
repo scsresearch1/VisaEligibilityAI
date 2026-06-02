@@ -44,6 +44,36 @@ function hasAnchoredEvidence(
   return profileEvidence.some((e) => textAnchoredInCorpus(e, inventory.corpus))
 }
 
+/** Build gap rows from criterion evaluations when the LLM omits a gaps array. */
+export function synthesizeGapsFromEvaluations(
+  evaluations: NonNullable<LlmScientificAnalysis['criterionEvaluations']>,
+  categories: VisaCategory[],
+): GapItem[] {
+  const gaps: GapItem[] = []
+  for (const ev of evaluations) {
+    if (!VISA_CRITERIA.some((c) => c.id === ev.criterionId && categories.includes(c.category))) {
+      continue
+    }
+    const c = VISA_CRITERIA.find((x) => x.id === ev.criterionId)!
+    const score = ev.evidenceScore ?? 50
+    if (score >= 62 && !ev.gapSummary?.trim()) continue
+
+    gaps.push({
+      id: `gap-synth-${ev.criterionId}`,
+      category: c.category,
+      criterionId: ev.criterionId,
+      severity: score < 35 ? 'critical' : score < 56 ? 'high' : 'medium',
+      title: ev.gapSummary?.slice(0, 120) || `Evidence gap: ${c.title}`,
+      description:
+        ev.buildRecommendation ||
+        ev.gapSummary ||
+        `Rubric score ${score}/100 for ${c.code} — consulting team must build criterion-aligned evidence.`,
+      impactScore: clamp(Math.round(100 - score), 1, 99),
+    })
+  }
+  return gaps.slice(0, 14)
+}
+
 export function clampLlmScoreToBaseline(
   ruleScore: number,
   llmScore: number,
@@ -141,7 +171,7 @@ export function validateAndNormalizeLlmAnalysis(
       confidence: clamp(a.confidence ?? 0.75, 0.35, 0.95),
     }))
 
-  const gaps: GapItem[] = (llm.gaps ?? [])
+  let gaps: GapItem[] = (llm.gaps ?? [])
     .filter((g) => !g.criterionId || validIds.has(g.criterionId))
     .map((g, i) => {
       const rule = g.criterionId ? ruleById.get(g.criterionId) : undefined
@@ -157,6 +187,10 @@ export function validateAndNormalizeLlmAnalysis(
         ),
       }
     })
+
+  if (gaps.length === 0) {
+    gaps = synthesizeGapsFromEvaluations(criterionEvaluations, categories)
+  }
 
   const unsupported = (llm.profileFacts?.unsupportedClaims ?? []).filter((c) =>
     textAnchoredInCorpus(c, inventory.corpus),
