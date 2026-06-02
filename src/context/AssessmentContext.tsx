@@ -281,7 +281,7 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
         analysisMeta: {
           provider: 'none',
           generatedAt: new Date().toISOString(),
-          error: 'Configure Gemini or Groq API key in app.config.ts',
+          error: 'Set VITE_GEMINI_API_KEY (AIza…) and/or VITE_GROQ_API_KEY (gsk_) in Netlify or .env',
           profileRevision: state.profileRevision,
         },
       })

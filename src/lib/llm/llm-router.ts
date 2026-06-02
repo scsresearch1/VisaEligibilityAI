@@ -1,7 +1,12 @@
 import { appConfig } from '../../config/app.config'
 import { callGemini, callGeminiWithPrompts } from './providers/gemini'
 import { callGroq, callGroqWithPrompts } from './providers/groq'
-import { isLikelyGoogleAiStudioKey } from './trim-prompt'
+import {
+  geminiKeySetupHint,
+  groqKeySetupHint,
+  isLikelyGoogleAiStudioKey,
+  isGroqRequestTooLargeError,
+} from './trim-prompt'
 import { isLlmOutputRequired, LlmOutputRequiredError } from './llm-output-policy'
 
 export type LlmPromptPair = { system: string; user: string }
@@ -37,9 +42,7 @@ export function isLlmConfigured(): boolean {
 
 async function tryGeminiPrompts(system: string, user: string): Promise<LlmTextResult> {
   if (!isGeminiReady()) {
-    throw new Error(
-      'Gemini unavailable — add a valid AIza… key from https://aistudio.google.com/apikey in geminiApiKey.',
-    )
+    throw new Error(`Gemini unavailable. ${geminiKeySetupHint()}`)
   }
   const res = await callGeminiWithPrompts(system, user)
   return { text: res.text, provider: 'gemini', model: res.modelUsed }
@@ -47,7 +50,7 @@ async function tryGeminiPrompts(system: string, user: string): Promise<LlmTextRe
 
 async function tryGroqPrompts(system: string, user: string): Promise<LlmTextResult> {
   if (!isGroqReady()) {
-    throw new Error('Groq unavailable — add groqApiKey in src/config/app.config.ts')
+    throw new Error(`Groq unavailable. ${groqKeySetupHint()}`)
   }
   const raw = await callGroqWithPrompts(system, user)
   return { text: raw, provider: 'groq', model: appConfig.llm.groqModel }
@@ -57,6 +60,9 @@ async function tryGeminiInsights(
   profileContext: string,
   eligibilityRules?: string,
 ): Promise<LlmTextResult> {
+  if (!isGeminiReady()) {
+    throw new Error(`Gemini unavailable. ${geminiKeySetupHint()}`)
+  }
   const res = await callGemini(profileContext, eligibilityRules)
   return { text: res.text, provider: 'gemini', model: res.modelUsed }
 }
@@ -74,11 +80,23 @@ async function withFallback(
   fallback: () => Promise<LlmTextResult>,
   primaryLabel: string,
   fallbackLabel: string,
+  canUseFallback: () => boolean,
 ): Promise<LlmTextResult> {
   try {
     return await primary()
   } catch (primaryErr) {
     const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr)
+
+    if (!canUseFallback()) {
+      const hint = isGroqRequestTooLargeError(primaryMsg)
+        ? ' Request still too large after automatic trim — shorten uploads or set VITE_GEMINI_API_KEY (AIza…) for Gemini fallback.'
+        : ''
+      if (isLlmOutputRequired()) {
+        throw new LlmOutputRequiredError(`${primaryLabel} failed (${primaryMsg}).${hint}`)
+      }
+      throw new Error(`${primaryLabel} failed (${primaryMsg}).${hint}`)
+    }
+
     try {
       const res = await fallback()
       return {
@@ -97,7 +115,7 @@ async function withFallback(
 }
 
 /**
- * Long workloads (full analysis, benchmark): Groq first (token limits), Gemini fallback.
+ * Long workloads (full analysis, benchmark): Groq first (on_demand 6k token cap), Gemini fallback.
  */
 export async function callLlmForLongTask(
   groqPrompts: LlmPromptPair,
@@ -116,6 +134,7 @@ export async function callLlmForLongTask(
         () => tryGeminiPrompts(geminiPrompts.system, geminiPrompts.user),
         'Groq',
         'Gemini',
+        () => isGeminiReady(),
       )
     }
     if (isGeminiReady()) {
@@ -125,7 +144,7 @@ export async function callLlmForLongTask(
       }
     }
     throw new LlmOutputRequiredError(
-      'Hybrid mode needs groqApiKey (long tasks) and/or a valid AIza… geminiApiKey.',
+      `Hybrid mode needs ${groqKeySetupHint()} and/or ${geminiKeySetupHint()}`,
     )
   }
 
@@ -139,6 +158,7 @@ export async function callLlmForLongTask(
       () => tryGroqPrompts(groqPrompts.system, groqPrompts.user),
       'Gemini',
       'Groq',
+      () => isGroqReady(),
     )
   }
   if (isGroqReady()) {
@@ -167,6 +187,7 @@ export async function callLlmForCriticalTask(
         () => tryGroqPrompts(groqPrompts.system, groqPrompts.user),
         'Gemini',
         'Groq',
+        () => isGroqReady(),
       )
     }
     if (isGroqReady()) {
@@ -176,7 +197,7 @@ export async function callLlmForCriticalTask(
       }
     }
     throw new LlmOutputRequiredError(
-      'Hybrid mode needs a valid AIza… geminiApiKey (critical tasks) and/or groqApiKey.',
+      `Hybrid mode needs ${geminiKeySetupHint()} and/or ${groqKeySetupHint()}`,
     )
   }
 
@@ -190,6 +211,7 @@ export async function callLlmForCriticalTask(
       () => tryGroqPrompts(groqPrompts.system, groqPrompts.user),
       'Gemini',
       'Groq',
+      () => isGroqReady(),
     )
   }
   if (isGroqReady()) {
@@ -216,6 +238,7 @@ export async function callLlmForCriticalInsights(
         () => tryGroqInsights(profileContext, eligibilityRules),
         'Gemini',
         'Groq',
+        () => isGroqReady(),
       )
     }
     if (isGroqReady()) {
@@ -225,7 +248,7 @@ export async function callLlmForCriticalInsights(
       }
     }
     throw new LlmOutputRequiredError(
-      'Hybrid mode needs a valid AIza… geminiApiKey (insights) and/or groqApiKey.',
+      `Hybrid mode needs ${geminiKeySetupHint()} and/or ${groqKeySetupHint()}`,
     )
   }
 
@@ -239,6 +262,7 @@ export async function callLlmForCriticalInsights(
       () => tryGroqInsights(profileContext, eligibilityRules),
       'Gemini',
       'Groq',
+      () => isGroqReady(),
     )
   }
   if (isGroqReady()) {

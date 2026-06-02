@@ -21,9 +21,13 @@ Vite only exposes variables prefixed with `VITE_`. They are embedded at **build 
 | `VITE_GEMINI_MODEL_FALLBACKS` | *(leave empty)* |
 | `VITE_GROQ_MODEL` | `llama-3.1-8b-instant` |
 | `VITE_MAX_PROFILE_CHARS` | `8000` |
-| `VITE_GROQ_MAX_PROFILE_CHARS` | `4500` |
-| `VITE_GROQ_MAX_SYSTEM_CHARS` | `5000` |
-| `VITE_GROQ_MAX_USER_CHARS` | `6000` |
+| `VITE_GROQ_MAX_PROFILE_CHARS` | `2800` |
+| `VITE_GROQ_MAX_SYSTEM_CHARS` | `2400` |
+| `VITE_GROQ_MAX_USER_CHARS` | `2800` |
+| `VITE_GROQ_MAX_INPUT_TOKENS` | `4200` |
+| `VITE_GROQ_MAX_INPUT_TOKENS_AGGRESSIVE` | `3200` |
+| `VITE_GROQ_MAX_COMPLETION_TOKENS` | `1200` (not 4096 — counts toward 6k limit) |
+| `VITE_GROQ_MAX_COMPLETION_TOKENS_AGGRESSIVE` | `1024` |
 | `VITE_LLM_TEMPERATURE` | `0.2` |
 | `VITE_LLM_TOP_P` | `0.9` |
 
@@ -55,6 +59,10 @@ Vite only exposes variables prefixed with `VITE_`. They are embedded at **build 
 |----------|--------|
 | `VITE_ENABLE_GOOGLE_SIGN_IN` | `false` |
 | `VITE_ENABLE_REGISTRATION` | `true` |
+
+## Groq token limit (important)
+
+`llama-3.1-8b-instant` on the free/on_demand tier allows about **6000 tokens per request** (prompt + completion). If you see **413 Request too large**, ensure `VITE_GROQ_MAX_COMPLETION_TOKENS` is **1200** (not 4096) and use the char limits above, or add a valid **`VITE_GEMINI_API_KEY`** (`AIza…`) for automatic Gemini fallback.
 
 ## Security
 

@@ -35,6 +35,11 @@ export interface AppConfig {
     groqMaxProfileChars: number
     groqMaxSystemChars: number
     groqMaxUserChars: number
+    /** Input token budget for Groq on_demand (~6000 total incl. completion). */
+    groqMaxInputTokens: number
+    groqMaxInputTokensAggressive: number
+    groqMaxCompletionTokens: number
+    groqMaxCompletionTokensAggressive: number
     temperature: number
     topP: number
     requireLlmOutput: boolean
@@ -74,9 +79,13 @@ export const appConfig: AppConfig = {
     groqApiKey: envString('VITE_GROQ_API_KEY'),
     groqModel: envString('VITE_GROQ_MODEL', 'llama-3.1-8b-instant'),
     maxProfileChars: envNumber('VITE_MAX_PROFILE_CHARS', 8000),
-    groqMaxProfileChars: envNumber('VITE_GROQ_MAX_PROFILE_CHARS', 4500),
-    groqMaxSystemChars: envNumber('VITE_GROQ_MAX_SYSTEM_CHARS', 5000),
-    groqMaxUserChars: envNumber('VITE_GROQ_MAX_USER_CHARS', 6000),
+    groqMaxProfileChars: envNumber('VITE_GROQ_MAX_PROFILE_CHARS', 2800),
+    groqMaxSystemChars: envNumber('VITE_GROQ_MAX_SYSTEM_CHARS', 2400),
+    groqMaxUserChars: envNumber('VITE_GROQ_MAX_USER_CHARS', 2800),
+    groqMaxInputTokens: envNumber('VITE_GROQ_MAX_INPUT_TOKENS', 4200),
+    groqMaxInputTokensAggressive: envNumber('VITE_GROQ_MAX_INPUT_TOKENS_AGGRESSIVE', 3200),
+    groqMaxCompletionTokens: envNumber('VITE_GROQ_MAX_COMPLETION_TOKENS', 1200),
+    groqMaxCompletionTokensAggressive: envNumber('VITE_GROQ_MAX_COMPLETION_TOKENS_AGGRESSIVE', 1024),
     temperature: envNumber('VITE_LLM_TEMPERATURE', 0.2),
     topP: envNumber('VITE_LLM_TOP_P', 0.9),
     requireLlmOutput: envBool('VITE_REQUIRE_LLM_OUTPUT', true),

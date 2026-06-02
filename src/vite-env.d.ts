@@ -23,6 +23,10 @@ interface ImportMetaEnv {
   readonly VITE_GROQ_MAX_PROFILE_CHARS: string
   readonly VITE_GROQ_MAX_SYSTEM_CHARS: string
   readonly VITE_GROQ_MAX_USER_CHARS: string
+  readonly VITE_GROQ_MAX_INPUT_TOKENS: string
+  readonly VITE_GROQ_MAX_INPUT_TOKENS_AGGRESSIVE: string
+  readonly VITE_GROQ_MAX_COMPLETION_TOKENS: string
+  readonly VITE_GROQ_MAX_COMPLETION_TOKENS_AGGRESSIVE: string
   readonly VITE_LLM_TEMPERATURE: string
   readonly VITE_LLM_TOP_P: string
   readonly VITE_REQUIRE_LLM_OUTPUT: string
