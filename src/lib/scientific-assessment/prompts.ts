@@ -119,6 +119,16 @@ export function buildScientificInsightsUserPrompt(profileContext: string): strin
   return `Generate scientifically grounded strategy insights JSON for this candidate.\n\n${profileContext}`
 }
 
+/** Compact insights prompt for Groq token limits — must return non-empty rows array. */
+export function buildScientificInsightsSystemPromptCompact(categories: VisaCategory[]): string {
+  return [
+    'Output ONLY valid JSON: {"rows":[...]} with at least 3 rows (required).',
+    `Pathways: ${categories.join(', ')}.`,
+    'Per row: categoryOfficialName, actionableItems (2-4 strings), rmTeamRecommendedServices (2-3), sourceStrategicBasis, visaCategory (EB1A|EB1B|EB1C).',
+    'Use criterion titles and specific profile facts — no generic Healthcare templates.',
+  ].join(' ')
+}
+
 export function buildScientificBenchmarkSystemPrompt(
   categories: VisaCategory[],
   eligibilityRulesBlock?: string,

@@ -1,4 +1,5 @@
 import type { ProfileInsightRow, VisaCategory } from '../../types/assessment'
+import { extractJsonObject, parseJsonLenient } from './parse-json-lenient'
 
 interface RawRow {
   categoryOfficialName?: string
@@ -6,6 +7,7 @@ interface RawRow {
   rmTeamRecommendedServices?: string[] | string
   sourceStrategicBasis?: string
   visaCategory?: string
+  criterionId?: string
 }
 
 function toList(value: string[] | string | undefined): string[] {
@@ -26,24 +28,60 @@ function normalizeCategory(cat?: string): VisaCategory | undefined {
   return undefined
 }
 
-import { extractJsonObject, parseJsonLenient } from './parse-json-lenient'
+function normalizeRawRow(row: RawRow, i: number): ProfileInsightRow | null {
+  const name = String(row.categoryOfficialName ?? '').trim()
+  const actions = toList(row.actionableItems)
+  if (!name && actions.length === 0) return null
+
+  return {
+    id: `insight-${i}-${Date.now()}`,
+    categoryOfficialName: name || 'Profile-building priority',
+    actionableItems:
+      actions.length > 0
+        ? actions
+        : ['Document evidence for this criterion within 8–12 weeks'],
+    rmTeamRecommendedServices: toList(row.rmTeamRecommendedServices).length
+      ? toList(row.rmTeamRecommendedServices)
+      : ['Evidence package preparation', 'Criterion alignment review'],
+    sourceStrategicBasis: String(row.sourceStrategicBasis ?? 'Derived from pathway criteria and profile.'),
+    visaCategory: normalizeCategory(row.visaCategory),
+  }
+}
+
+function extractRawRows(parsed: Record<string, unknown>): RawRow[] {
+  const candidates = [
+    parsed.rows,
+    parsed.insights,
+    parsed.strategyRows,
+    parsed.profileInsights,
+    (parsed.data as Record<string, unknown> | undefined)?.rows,
+  ]
+
+  for (const c of candidates) {
+    if (Array.isArray(c) && c.length > 0) {
+      return c as RawRow[]
+    }
+  }
+
+  if (Array.isArray(parsed)) {
+    return parsed as RawRow[]
+  }
+
+  return []
+}
 
 export function parseInsightsJson(text: string): ProfileInsightRow[] {
   const cleaned = extractJsonObject(text)
+  const parsed = parseJsonLenient(cleaned, 'Insights') as Record<string, unknown>
+  const rawRows = extractRawRows(parsed)
 
-  const parsed = parseJsonLenient(cleaned, 'Insights') as { rows?: RawRow[] }
-  const rows = parsed.rows ?? (Array.isArray(parsed) ? (parsed as RawRow[]) : [])
+  const rows = rawRows
+    .map((row, i) => normalizeRawRow(row, i))
+    .filter((r): r is ProfileInsightRow => r !== null)
 
-  if (!Array.isArray(rows) || rows.length === 0) {
+  if (rows.length === 0) {
     throw new Error('LLM returned empty rows array')
   }
 
-  return rows.map((row, i) => ({
-    id: `insight-${i}-${Date.now()}`,
-    categoryOfficialName: String(row.categoryOfficialName ?? 'Unnamed category'),
-    actionableItems: toList(row.actionableItems),
-    rmTeamRecommendedServices: toList(row.rmTeamRecommendedServices),
-    sourceStrategicBasis: String(row.sourceStrategicBasis ?? ''),
-    visaCategory: normalizeCategory(row.visaCategory),
-  }))
+  return rows
 }
