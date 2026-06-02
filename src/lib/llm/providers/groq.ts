@@ -2,10 +2,13 @@ import { appConfig } from '../../../config/app.config'
 import { buildInsightsSystemPrompt, buildInsightsUserPrompt } from '../prompt'
 import {
   groqKeySetupHint,
+  isGroqRateLimitError,
   isGroqRequestTooLargeError,
+  parseGroqRetryDelayMs,
   trimGroqPrompts,
   type TrimGroqOptions,
 } from '../trim-prompt'
+import { delayBetweenGroqCalls, enqueueGroqRequest } from './groq-queue'
 
 /** Groq request profile — balances 6000 token/request cap vs JSON size. */
 export type GroqPromptSize = 'default' | 'full-analysis' | 'roadmap-only'
@@ -15,10 +18,10 @@ function groqMaxCompletionTokens(aggressive: boolean, size: GroqPromptSize): num
   if (size === 'full-analysis') {
     return aggressive
       ? (llm.groqMaxCompletionTokensAggressive ?? 1536)
-      : (llm.groqMaxCompletionTokensLargeJson ?? 2048)
+      : (llm.groqMaxCompletionTokensLargeJson ?? 1800)
   }
   if (size === 'roadmap-only') {
-    return aggressive ? 1200 : (llm.groqMaxCompletionTokensRoadmap ?? 1600)
+    return aggressive ? 1024 : (llm.groqMaxCompletionTokensRoadmap ?? 1400)
   }
   return aggressive
     ? (llm.groqMaxCompletionTokensAggressive ?? 1024)
@@ -84,20 +87,40 @@ async function callGroqOnce(
   return text
 }
 
+async function callGroqWithRetries(
+  systemInstruction: string,
+  userText: string,
+  size: GroqPromptSize,
+): Promise<string> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      return await callGroqOnce(systemInstruction, userText, false, size)
+    } catch (error) {
+      lastError = error
+      const message = error instanceof Error ? error.message : String(error)
+
+      if (isGroqRequestTooLargeError(message)) {
+        return callGroqOnce(systemInstruction, userText, true, size)
+      }
+
+      if (isGroqRateLimitError(message) && attempt < 3) {
+        await new Promise((r) => setTimeout(r, parseGroqRetryDelayMs(message)))
+        continue
+      }
+
+      throw error
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError))
+}
+
 export async function callGroqWithPrompts(
   systemInstruction: string,
   userText: string,
   size: GroqPromptSize = 'default',
 ): Promise<string> {
-  try {
-    return await callGroqOnce(systemInstruction, userText, false, size)
-  } catch (firstError) {
-    const message = firstError instanceof Error ? firstError.message : String(firstError)
-    if (!isGroqRequestTooLargeError(message)) {
-      throw firstError
-    }
-    return callGroqOnce(systemInstruction, userText, true, size)
-  }
+  return enqueueGroqRequest(() => callGroqWithRetries(systemInstruction, userText, size))
 }
 
 export async function callGroq(
@@ -110,3 +133,5 @@ export async function callGroq(
     'default',
   )
 }
+
+export { delayBetweenGroqCalls }

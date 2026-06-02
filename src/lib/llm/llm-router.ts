@@ -5,6 +5,7 @@ import {
   geminiKeySetupHint,
   groqKeySetupHint,
   isLikelyGoogleAiStudioKey,
+  isGroqRateLimitError,
   isGroqRequestTooLargeError,
 } from './trim-prompt'
 import { isLlmOutputRequired, LlmOutputRequiredError } from './llm-output-policy'
@@ -91,10 +92,15 @@ async function withFallback(
   } catch (primaryErr) {
     const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr)
 
-    if (!canUseFallback()) {
+    const shouldFallback =
+      canUseFallback() || (primaryLabel === 'Groq' && isGroqRateLimitError(primaryMsg) && isGeminiReady())
+
+    if (!shouldFallback) {
       const hint = isGroqRequestTooLargeError(primaryMsg)
-        ? ' Request still too large after automatic trim — shorten uploads or set VITE_GEMINI_API_KEY (AIza…) for Gemini fallback.'
-        : ''
+        ? ' Shorten uploads or set VITE_GEMINI_API_KEY (AIza…) for Gemini fallback.'
+        : isGroqRateLimitError(primaryMsg)
+          ? ' Groq free tier: ~6000 tokens/min. Wait 10s and click Run again, or add VITE_GEMINI_API_KEY (AIza…).'
+          : ''
       if (isLlmOutputRequired()) {
         throw new LlmOutputRequiredError(`${primaryLabel} failed (${primaryMsg}).${hint}`)
       }

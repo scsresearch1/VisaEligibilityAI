@@ -35,7 +35,7 @@ function completionBudgetForTrim(options?: TrimGroqOptions): number {
   if (options?.preferLargeJsonBudget) {
     return aggressive
       ? (llm.groqMaxCompletionTokensAggressive ?? 1536)
-      : (llm.groqMaxCompletionTokensLargeJson ?? 2048)
+      : (llm.groqMaxCompletionTokensLargeJson ?? 1800)
   }
   if (options?.preferRoadmapBudget) {
     return aggressive ? 1200 : (llm.groqMaxCompletionTokensRoadmap ?? 1600)
@@ -86,7 +86,21 @@ export function trimGroqPrompts(
 }
 
 export function isGroqRequestTooLargeError(message: string): boolean {
-  return /413|too large|tokens per minute|TPM/i.test(message)
+  return /413|too large for model/i.test(message)
+}
+
+/** Groq 429 — TPM/RPM exceeded (often from two big calls within one minute). */
+export function isGroqRateLimitError(message: string): boolean {
+  return /429|rate limit reached/i.test(message)
+}
+
+/** Parse "Please try again in 3.62s" from Groq error body. */
+export function parseGroqRetryDelayMs(message: string): number {
+  const match = message.match(/try again in ([\d.]+)\s*s/i)
+  if (match) {
+    return Math.ceil(parseFloat(match[1]) * 1000) + 800
+  }
+  return 5000
 }
 
 export function isLikelyGoogleAiStudioKey(key: string): boolean {
