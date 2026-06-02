@@ -59,12 +59,12 @@ export function buildBenchmarkSystemPrompt(
   ].join('\n\n')
 }
 
-export function buildBenchmarkUserPrompt(profileContext: string): string {
+/** @deprecated Use buildBenchmarkUserPrompt(state, profileContext) from build-benchmark-user-prompt.ts */
+export function buildBenchmarkUserPromptLegacy(profileContext: string): string {
   return [
     'Using the profile and structured analysis below, produce a customized benchmark quantification.',
     'Tie consultingResponsibility text to the candidate\'s actual employers, projects, and technical domain.',
     'Do NOT reuse sample benchmark names, employers, or product names from examples — only facts in the profile.',
-    'evaluationLogic must reference this candidate\'s domains, gaps, and employers from the profile.',
     profileContext,
   ].join('\n\n')
 }

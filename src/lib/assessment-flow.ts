@@ -64,10 +64,10 @@ export const FLOW_STEPS: FlowStep[] = [
     id: 'analysis',
     stepNumber: 3,
     path: '/assessment/analysis',
-    title: 'Deep Profile Parsing',
-    shortTitle: 'Parsing',
+    title: 'Deep Profile Parsing & Rule Engine',
+    shortTitle: 'Engine',
     description:
-      'Extract profile signals and quantify build quantities — papers, patents, products the team must create (not collect).',
+      'Multi-stage pipeline: CV segmentation, signal graph, 8 CFR rule-engine scoring, hybrid LLM reconciliation (Groq + Gemini), and quantified build plan.',
     featureIds: [3],
     phase: 'analysis',
   },
@@ -118,7 +118,7 @@ export const FLOW_STEPS: FlowStep[] = [
     title: 'Evidence Build Plan',
     shortTitle: 'Build plan',
     description:
-      'Quantified deliverables the consulting team must produce (publish, file, ship, document) matched to this profile.',
+      'Quantified plan across publications, patents, products, white papers, media, speaking, judging, case studies, documentation, and visibility — with RM metric targets and deliverable specs.',
     featureIds: [8],
     phase: 'improve',
   },
@@ -128,7 +128,8 @@ export const FLOW_STEPS: FlowStep[] = [
     path: '/assessment/report',
     title: 'Readiness Benchmark Report',
     shortTitle: 'Report',
-    description: 'Quantified evidence-based readiness report for professional review.',
+    description:
+      'Scientific benchmark across 12 evidence areas — rubric-anchored readiness, build quantities, and counsel-ready narrative.',
     featureIds: [9],
     phase: 'deliver',
   },

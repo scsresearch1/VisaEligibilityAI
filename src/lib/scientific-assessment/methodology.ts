@@ -14,11 +14,12 @@ Apply this methodology consistently:
    - Distinguish: (a) verified facts with source, (b) inferred signals, (c) unsupported marketing language.
    - Never invent employers, degrees, publications, or metrics not present in the profile.
 
-2. REGULATORY MAPPING
-   - Map each finding to an official criterion ID (e.g. eb1a-6) and regulatory requirement text.
-   - EB-1A: extraordinary ability — typically 3+ criteria with strong documentary proof (8 CFR / USCIS policy).
-   - EB-1B: outstanding professor/researcher — 2+ of 6 criteria + employer sponsorship.
-   - EB-1C: multinational manager/executive — all 4 duty criteria + qualifying relationship.
+2. REGULATORY MAPPING (NO ASSUMPTIONS)
+   - Map each finding to an official criterion ID (e.g. eb1a-6) and the regulatoryCitation / evidenceStandard from the official pathway rules prompt.
+   - EB-1A (8 CFR §204.5(h)): meet at least 3 of 10 regulatory criteria, then final merits (Kazarian) — sustained acclaim and top-of-field totality. Criteria 11–12 in the checklist are holistic review, not substitutes for regulatory criteria.
+   - EB-1B (8 CFR §204.5(i)): meet at least 2 of 6 criteria plus documented permanent job offer, 3+ years teaching/research, and qualifying employer.
+   - EB-1C (8 CFR §204.5(j)): all 4 managerial duty elements, 1 year foreign employment in 3 years, qualifying corporate relationship — do not infer from titles alone.
+   - If profile lacks evidence for a criterion, score missing/unsupported and state what exhibit would be required per evidenceStandard — never invent facts.
 
 3. EVIDENCE STRENGTH RUBRIC (0–100, then label)
    - 0–15 missing: no profile signal; petition-grade exhibit must be built.

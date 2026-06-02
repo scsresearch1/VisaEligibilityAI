@@ -32,12 +32,32 @@ const EMPTY_COUNTS: ProfileMetricCounts = {
   guestLecture: 0,
 }
 
-/** Infer counts from uploads + NLP achievements (extend with real parsing later) */
+/** Infer counts from uploads, structured parse, and achievements */
 export function extractProfileMetricCounts(state: Pick<
   AssessmentState,
-  'uploads' | 'parsedAchievements'
+  'uploads' | 'parsedAchievements' | 'structuredProfile'
 >): ProfileMetricCounts {
   const counts = { ...EMPTY_COUNTS }
+
+  const structured = state.structuredProfile
+  if (structured) {
+    counts.sci += structured.publications.length
+    counts.scopus += structured.publications.length
+    counts.patent += structured.patents.length
+    counts.product += structured.projects.length
+    if (structured.workExperience.some((w) => /product|platform|prototype/i.test(w.title))) {
+      counts.product += 1
+    }
+    counts.bookChapter += structured.publications.filter((p) =>
+      /chapter|book|isbn/i.test(p),
+    ).length
+    counts.guestLecture += structured.workExperience.filter((w) =>
+      /professor|lecturer|teach|faculty/i.test(w.title),
+    ).length
+    counts.conference += structured.certifications.filter((c) =>
+      /conference|present|speaker/i.test(c),
+    ).length
+  }
 
   for (const upload of state.uploads) {
     switch (upload.category) {

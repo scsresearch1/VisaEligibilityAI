@@ -16,6 +16,7 @@ import {
   buildRecommendationsFromRoadmap,
   buildRiskFlagsFromProfile,
 } from '../analysis-from-profile'
+import { mergeRecommendationsWithBuildPlan } from '../evidence-build-plan'
 import type { CriterionEvidenceScore } from './score-criterion'
 import { isLlmOutputRequired } from '../llm/llm-output-policy'
 import { LlmOutputRequiredError } from '../llm/llm-output-policy'
@@ -69,8 +70,12 @@ function mergeEvidenceScores(
       })
       continue
     }
-    // Weighted blend: 55% rule-based (reproducible) + 45% LLM (contextual)
-    const blended = Math.round(rule.score * 0.55 + llmScore * 0.45)
+    // Validated LLM scores are clamped to baseline — blend favors reproducible rubric
+    const anchored =
+      Array.isArray(ev.profileEvidence) &&
+      ev.profileEvidence.length > 0
+    const ruleWeight = anchored ? 0.5 : 0.72
+    const blended = Math.round(rule.score * ruleWeight + llmScore * (1 - ruleWeight))
     merged.set(ev.criterionId, {
       score: blended,
       strength: evidenceScoreToStrength(blended),
@@ -99,7 +104,13 @@ function buildEvidenceFromMerged(
       documentId: uploadCount > 0 ? 'resume-1' : undefined,
       label: `${c.code} ${c.title}: ${strength} (evidence index ${score}/100) — ${profile.candidateName}.`,
       strength,
-      notes: `Scientific rubric score ${score}/100. Build focus: ${buildFocusForCriterion(c.id)}.`,
+      notes: [
+        `Scientific rubric ${score}/100.`,
+        c.regulatoryCitation ? `Regulation: ${c.regulatoryCitation.slice(0, 120)}.` : '',
+        `Build: ${buildFocusForCriterion(c.id)}.`,
+      ]
+        .filter(Boolean)
+        .join(' '),
     }
   })
 
@@ -221,22 +232,34 @@ export function reconcileScientificAnalysis(
 
   const llmRecs = enrichRecommendations(llm.recommendations, profile)
 
+  const partialForPlan: AssessmentState = {
+    ...state,
+    evidenceItems,
+    criterionResults,
+    gaps,
+  }
+
   let recommendations: DocumentRecommendation[]
   if (llmOnly) {
     if (llmRecs.length === 0) {
-      throw new LlmOutputRequiredError('LLM returned no recommendations.')
+      recommendations = mergeRecommendationsWithBuildPlan([], partialForPlan)
+      if (recommendations.length === 0) {
+        throw new LlmOutputRequiredError('LLM returned no recommendations.')
+      }
+    } else {
+      recommendations = mergeRecommendationsWithBuildPlan(llmRecs, partialForPlan).slice(0, 14)
     }
-    recommendations = llmRecs.slice(0, 12)
   } else {
     const ruleRecs = buildRecommendationsFromRoadmap(
       roadmapTable,
       state.selectedCategories,
       profile,
     )
-    recommendations =
-      llmRecs.length >= 3
-        ? llmRecs.slice(0, 12)
-        : [...llmRecs, ...ruleRecs].slice(0, 12)
+    const merged = mergeRecommendationsWithBuildPlan(
+      llmRecs.length >= 3 ? llmRecs : [...llmRecs, ...ruleRecs],
+      partialForPlan,
+    )
+    recommendations = merged.length > 0 ? merged : ruleRecs.slice(0, 14)
   }
 
   let parsedAchievements: ParsedAchievement[]

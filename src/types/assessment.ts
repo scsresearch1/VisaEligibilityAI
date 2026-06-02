@@ -62,7 +62,14 @@ export interface VisaCriterion {
   category: VisaCategory
   code: string
   title: string
+  /** Plain-language requirement (displayed in UI). */
   description: string
+  /** Statutory / regulatory anchor (INA or 8 CFR). */
+  regulatoryCitation?: string
+  /** What documentary proof must show — assess only what appears in the uploaded profile. */
+  evidenceStandard?: string
+  /** Common evidence gaps — do not treat resume marketing language as proof. */
+  evaluationCaution?: string
 }
 
 export interface ParsedAchievement {

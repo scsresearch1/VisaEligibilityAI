@@ -28,7 +28,7 @@ interface AreaDef {
   defaultPriority: BenchmarkPriority
 }
 
-const EB1A_AREAS: AreaDef[] = [
+export const EB1A_ROADMAP_AREAS: AreaDef[] = [
   {
     id: 'br-pub',
     area: 'Scholarly / Technical Publications',
@@ -234,7 +234,7 @@ export function computeProfileAwareRoadmapTable(
   state: AssessmentState,
   profile: ExtractedProfileSignals,
 ): BenchmarkRoadmapRow[] {
-  const areas = EB1A_AREAS
+  const areas = EB1A_ROADMAP_AREAS
 
   return areas.map((def) => {
     let current = scoreForCriteria(state, def.criterionIds)

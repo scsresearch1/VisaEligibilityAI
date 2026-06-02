@@ -107,20 +107,62 @@ function scoreEb1aCriterion(
 function scoreEb1bCriterion(code: string, profile: ExtractedProfileSignals): { score: number; signals: string[] } {
   const text = profile.fullText.toLowerCase()
   const signals: string[] = []
-  let score = 15
-
-  if (code === '1' || code === '2') {
-    if (profile.publications.length > 0) score += 30
-    if (/research|professor|ph\.?d|postdoc|university/i.test(text)) score += 25
-    signals.push('Academic/research profile signals')
+  const add = (pts: number, signal: string) => {
+    signals.push(signal)
+    return pts
   }
-  if (code === '3' && /award|recognition/i.test(text)) score += 22
-  if (/citation|journal|paper/i.test(text)) {
-    score += 20
-    signals.push('Publication/citation signals')
+  let score = 12
+
+  switch (code) {
+    case '1': {
+      if (profile.awards.length > 0) score += add(32, `Award: ${profile.awards[0]?.slice(0, 60)}`)
+      if (/major prize|fellowship|honou?r|medal/i.test(text)) score += add(18, 'Major prize/honor keywords')
+      break
+    }
+    case '2': {
+      if (/fellow|membership|ieee|acm|association/i.test(text)) score += add(24, 'Selective membership signals')
+      break
+    }
+    case '3': {
+      if (/published material|written about|profiled in|featured in/i.test(text)) {
+        score += add(26, 'Published material about candidate')
+      }
+      if (/media|press coverage|interview/i.test(text)) score += add(14, 'Media coverage signals')
+      break
+    }
+    case '4': {
+      if (/peer review|reviewer|panel|judge|examiner/i.test(text)) {
+        score += add(28, 'Peer review / judging signals')
+      }
+      break
+    }
+    case '5': {
+      if (profile.patents.length > 0) score += add(22, 'Patent/research IP in profile')
+      if (/original research|significant impact|citation|h-index/i.test(text)) {
+        score += add(24, 'Research impact signals')
+      }
+      if (profile.keyClaims.some((c) => /research|invent|developed/i.test(c))) {
+        score += add(12, 'Research contribution in work history')
+      }
+      break
+    }
+    case '6': {
+      if (profile.publications.length > 0) {
+        score += add(25 + Math.min(18, profile.publications.length * 6), `${profile.publications.length} publication(s)`)
+      }
+      if (/journal|doi|scholar|paper|author/i.test(text)) score += add(14, 'Scholarly authorship keywords')
+      break
+    }
+    default:
+      break
   }
 
-  return { score: Math.min(90, score), signals }
+  if (/professor|lecturer|researcher|ph\.?\s*d/i.test(text) && score < 40) {
+    score += add(8, 'Academic role context (does not alone satisfy criterion)')
+  }
+
+  if (profile.extractionQuality === 'minimal') score = Math.min(score, 38)
+  return { score: Math.min(92, Math.max(8, score)), signals: signals.slice(0, 5) }
 }
 
 function scoreEb1cCriterion(_code: string, profile: ExtractedProfileSignals): { score: number; signals: string[] } {
@@ -162,21 +204,30 @@ export function scoreAllCriteria(
       evidenceScore: result.score,
       strength,
       profileSignals: result.signals,
-      regulatoryNote: `${c.code}. ${c.title} — ${c.description.slice(0, 120)}…`,
+      regulatoryNote: c.regulatoryCitation
+        ? `${c.code}. ${c.title} — ${c.regulatoryCitation}`
+        : `${c.code}. ${c.title} — ${c.description.slice(0, 160)}`,
     }
   })
 }
 
 export function buildRuleBasedCriterionDigest(scores: CriterionEvidenceScore[]): string {
   const lines = [
-    '=== RULE-BASED CRITERION SCORES (reproducible baseline — align LLM output to ±15 points unless profile clearly warrants) ===',
+    '=== RULE-BASED CRITERION BASELINE (mandatory anchor — LLM may adjust ±15 ONLY with quoted profileEvidence from inventory) ===',
+    'Scores without anchored profileEvidence in your JSON will be pulled back toward these baselines.',
   ]
   for (const s of scores) {
+    const criterion = VISA_CRITERIA.find((c) => c.id === s.criterionId)
     lines.push(
-      `${s.criterionId} | ${s.category} ${s.code} | score ${s.evidenceScore}/100 (${s.strength}) | ${s.title}`,
+      `${s.criterionId} | ${s.category} ${s.code} | BASE ${s.evidenceScore}/100 (${s.strength}) | ${s.title}`,
     )
+    if (criterion?.evidenceStandard) {
+      lines.push(`  Evidence standard: ${criterion.evidenceStandard.slice(0, 140)}…`)
+    }
     if (s.profileSignals.length > 0) {
-      lines.push(`  Signals: ${s.profileSignals.join('; ')}`)
+      lines.push(`  Detected signals: ${s.profileSignals.join('; ')}`)
+    } else {
+      lines.push('  Detected signals: none — score as missing/unsupported unless inventory proves otherwise')
     }
   }
   return lines.join('\n')

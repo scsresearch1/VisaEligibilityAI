@@ -1,5 +1,5 @@
 import { appConfig } from '../../config/app.config'
-import { buildHeuristicPersonalizedPayload } from '../benchmark-report/personalized-heuristic'
+import { reconcileBenchmarkPayload } from '../benchmark-report/reconcile-benchmark-payload'
 import type { PersonalizedBenchmarkPayload } from '../benchmark-report/personalized-heuristic'
 import type { AssessmentState, LlmRunMeta } from '../../types/assessment'
 import { buildEligibilityRulesPrompt } from '../../data/eligibility-rules'
@@ -9,15 +9,13 @@ import { buildRuleBasedCriterionDigest, scoreAllCriteria } from '../scientific-a
 import {
   buildBenchmarkSystemPrompt,
   buildBenchmarkSystemPromptCompact,
-  buildBenchmarkUserPrompt,
 } from './benchmark-prompt'
-import { parseBenchmarkJson } from './parse-benchmark-json'
-import { isLlmConfigured, callLlmForLongTask } from './llm-router'
+import { buildBenchmarkUserPrompt } from './build-benchmark-user-prompt'
+import { parseBenchmarkJsonLenient } from './parse-benchmark-json'
+import { isLlmConfigured, callLlmForLongTask, isGeminiReady } from './llm-router'
 import { getProfileSnippetLimit } from './trim-prompt'
 import {
   assertLlmProvider,
-  isLlmOutputRequired,
-  LlmOutputRequiredError,
   stampLlmMeta,
 } from './llm-output-policy'
 
@@ -59,15 +57,42 @@ export interface GenerateBenchmarkResult {
 export async function generatePersonalizedBenchmarkPayload(
   state: AssessmentState,
 ): Promise<GenerateBenchmarkResult> {
-  const heuristic = buildHeuristicPersonalizedPayload(state)
+  const reconciledHeuristic = reconcileBenchmarkPayload(state, null)
+
+  const finish = (
+    payload: PersonalizedBenchmarkPayload,
+    used: 'gemini' | 'groq',
+    model: string,
+    note?: string,
+  ): GenerateBenchmarkResult => {
+    const meta = stampLlmMeta(
+      {
+        provider: used,
+        model,
+        generatedAt: new Date().toISOString(),
+        error: note,
+      },
+      state.profileRevision,
+    )
+    assertLlmProvider(meta, 'Benchmark report')
+    return {
+      payload: {
+        ...payload,
+        personalizationSource: payload.personalizationSource ?? 'llm',
+        llmModel: model,
+      },
+      meta,
+    }
+  }
 
   if (!isLlmConfigured() || appConfig.llm.provider === 'off') {
     return {
-      payload: heuristic,
+      payload: reconciledHeuristic,
       meta: {
         provider: 'fallback',
         generatedAt: new Date().toISOString(),
-        error: 'LLM off — profile-aware heuristic quantification used.',
+        error: 'LLM off — scientific heuristic benchmark used.',
+        profileRevision: state.profileRevision,
       },
     }
   }
@@ -93,51 +118,54 @@ export async function generatePersonalizedBenchmarkPayload(
 
   const geminiPrompts = {
     system: buildBenchmarkSystemPrompt(state.selectedCategories, eligibilityRules),
-    user: buildBenchmarkUserPrompt(buildContext(false)),
+    user: buildBenchmarkUserPrompt(state, buildContext(false)),
   }
   const groqPrompts = {
     system: buildBenchmarkSystemPromptCompact(state.selectedCategories),
-    user: buildBenchmarkUserPrompt(buildContext(true)),
+    user: buildBenchmarkUserPrompt(state, buildContext(true)),
   }
 
-  const finish = (
-    payload: PersonalizedBenchmarkPayload,
-    used: 'gemini' | 'groq',
-    model: string,
-    error?: string,
-  ): GenerateBenchmarkResult => {
-    const meta = stampLlmMeta(
-      {
-        provider: used,
-        model,
-        generatedAt: new Date().toISOString(),
-        error,
-      },
-      state.profileRevision,
-    )
-    assertLlmProvider(meta, 'Benchmark report')
-    return {
-      payload: { ...payload, personalizationSource: 'llm', llmModel: model },
-      meta,
-    }
-  }
+  let note: string | undefined
+  let provider: 'gemini' | 'groq' = 'groq'
+  let model = appConfig.llm.groqModel
+  let llmParsed: PersonalizedBenchmarkPayload | null = null
 
   try {
     const res = await callLlmForLongTask(groqPrompts, geminiPrompts)
-    return finish(parseBenchmarkJson(res.text), res.provider, res.model, res.note)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    if (isLlmOutputRequired()) {
-      throw err instanceof LlmOutputRequiredError ? err : new LlmOutputRequiredError(message)
+    provider = res.provider
+    model = res.model
+    if (res.note) note = res.note
+    llmParsed = parseBenchmarkJsonLenient(res.text)
+
+    if (!llmParsed || llmParsed.roadmapTable.length < 8) {
+      if (isGeminiReady()) {
+        const geminiOnly = await callLlmForLongTask(geminiPrompts, geminiPrompts)
+        const retry = parseBenchmarkJsonLenient(geminiOnly.text)
+        if (retry && retry.roadmapTable.length >= (llmParsed?.roadmapTable.length ?? 0)) {
+          llmParsed = retry
+          provider = geminiOnly.provider
+          model = geminiOnly.model
+          note = [note, 'Gemini retry for full 12-area roadmap.'].filter(Boolean).join(' ')
+        }
+      }
     }
 
-    return {
-      payload: heuristic,
-      meta: {
-        provider: 'fallback',
-        generatedAt: new Date().toISOString(),
-        error: `LLM benchmark failed (${message}) — profile-aware heuristic used.`,
-      },
+    const payload = reconcileBenchmarkPayload(state, llmParsed)
+    if (!llmParsed) {
+      note = [note, 'LLM parse failed; heuristic + rubric reconciliation used.'].filter(Boolean).join(' ')
+    } else if (llmParsed.roadmapTable.length < 12) {
+      note = [note, 'Partial LLM roadmap merged with rule-based 12-area baseline.'].filter(Boolean).join(' ')
     }
+
+    return finish(payload, provider, model, note)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    const payload = reconcileBenchmarkPayload(state, llmParsed)
+    return finish(
+      payload,
+      provider,
+      model,
+      `Benchmark LLM error (${message}); scientific reconciliation applied.`,
+    )
   }
 }

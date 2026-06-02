@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, FileCheck, AlertOctagon, Cpu, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Download, AlertOctagon, Cpu, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAssessment } from '../../context/AssessmentContext'
 import { StepGuard } from '../../hooks/useStepGuard'
@@ -8,10 +8,12 @@ import { benchmarkReportToPlainText } from '../../lib/benchmark-report'
 import StepNavigation, { StepHeader } from '../../components/assessment/StepNavigation'
 import Button from '../../components/ui/Button'
 import BenchmarkReportView from '../../components/assessment/BenchmarkReportView'
+import BenchmarkReportEngine from '../../components/assessment/BenchmarkReportEngine'
 import ProfileInsightsTable from '../../components/assessment/ProfileInsightsTable'
 import { appConfig } from '../../config/app.config'
 import BuildPrincipleBanner from '../../components/assessment/BuildPrincipleBanner'
 import { displayPersonalizationNote, sanitizeProfileInsightRow } from '../../lib/user-facing-labels'
+import { UI_COPY } from '../../lib/ui-copy'
 
 export default function ReportPage() {
   return (
@@ -77,42 +79,18 @@ function ReportContent() {
   return (
     <>
       <StepHeader stepId="report" />
-      <h1 className="text-2xl font-bold text-navy-900">Benchmark Readiness Report</h1>
-      <p className="mt-2 text-slate-600 max-w-2xl">
-        Professional, quantified EB-1 profile-building roadmap — what the consulting team must build
-        (not collect) matched to this profile.
-      </p>
 
       <div className="mt-4">
         <BuildPrincipleBanner compact />
       </div>
 
-      {!state.reportGenerated ? (
-        <div className="mt-8 rounded-xl border-2 border-dashed border-navy-300 bg-navy-900/5 p-8 text-center">
-          <FileCheck className="h-12 w-12 text-navy-900 mx-auto mb-4" />
-          <p className="text-navy-900 font-medium">Generate readiness benchmark report</p>
-          <p className="text-sm text-slate-600 mt-2 max-w-lg mx-auto">
-            Personalizes current scores, build quantities, and priorities from your uploaded profile
-            and selected criteria.
-          </p>
-          <Button
-            variant="secondary"
-            size="lg"
-            className="mt-6"
-            onClick={handleGenerate}
-            disabled={reportLoading}
-          >
-            {reportLoading ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin" />
-                Building personalized report…
-              </>
-            ) : (
-              'Generate readiness report'
-            )}
-          </Button>
-        </div>
-      ) : (
+      <BenchmarkReportEngine
+        reportLoading={reportLoading}
+        reportGenerated={state.reportGenerated}
+        onGenerate={handleGenerate}
+      />
+
+      {state.reportGenerated ? (
         <>
           <div className="mt-6 flex flex-wrap gap-3 items-center">
             <Button to="/assessment/dossier" variant="primary" size="md">
@@ -133,7 +111,19 @@ function ReportContent() {
             >
               {showSupplementary ? 'Hide' : 'Show'} supplementary tables
             </button>
+            {!reportLoading && (
+              <Button variant="ghost" size="sm" onClick={handleGenerate} className="border border-slate-200">
+                Regenerate report
+              </Button>
+            )}
           </div>
+
+          {reportLoading && (
+            <p className="mt-4 flex items-center gap-2 text-sm text-navy-800">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {UI_COPY.reportGenerating}
+            </p>
+          )}
 
           {reportMetaNote && (
             <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -141,12 +131,12 @@ function ReportContent() {
             </p>
           )}
 
-          {benchmarkReport && (
+          {benchmarkReport && !reportLoading && (
             <>
               <p className="mt-4 text-xs text-slate-500">
                 {displayPersonalizationNote(benchmarkReport)}
                 {' · '}
-                {benchmarkReport.totalAssetsToBuild} assets to build for this profile
+                {benchmarkReport.totalAssetsToBuild} assets across 12 evidence areas · rubric-anchored
               </p>
               <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 sm:p-10 shadow-sm">
                 <BenchmarkReportView report={benchmarkReport} />
@@ -214,7 +204,7 @@ function ReportContent() {
             </>
           )}
         </>
-      )}
+      ) : null}
 
       <StepNavigation stepId="report" nextDisabled={!state.reportGenerated} />
     </>

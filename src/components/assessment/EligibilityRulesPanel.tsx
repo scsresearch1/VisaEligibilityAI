@@ -7,6 +7,7 @@ import {
   VISA_CRITERIA,
   EB1C_PROGRAM_REQUIREMENTS,
 } from '../../data/eligibility-rules'
+import { PATHWAY_LEGAL_FRAMEWORK } from '../../data/pathway-framework'
 import type { VisaCategory } from '../../types/assessment'
 import { sanitizeUserFacingText } from '../../lib/user-facing-labels'
 
@@ -28,6 +29,7 @@ export default function EligibilityRulesPanel({ categories, compact }: Eligibili
     <div className="space-y-6">
       {categories.map((cat) => {
         const info = VISA_CATEGORY_INFO[cat]
+        const framework = PATHWAY_LEGAL_FRAMEWORK[cat]
         const criteria = VISA_CRITERIA.filter((c) => c.category === cat)
         const docs = COMMON_SUPPORTING_DOCUMENTS[cat]
         const notes = IMPORTANT_NOTES[cat]
@@ -47,9 +49,31 @@ export default function EligibilityRulesPanel({ categories, compact }: Eligibili
 
             <div className={compact ? 'p-4 space-y-4 text-sm' : 'p-5 space-y-5'}>
               <p className="text-slate-600">{info.subtitle}</p>
+
+              {!compact && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 space-y-2 text-xs text-slate-700">
+                  <p>
+                    <span className="font-semibold text-navy-900">Regulatory anchor: </span>
+                    {framework.regulatoryAnchor}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-navy-900">Standard: </span>
+                    {framework.overallStandard}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-navy-900">Threshold: </span>
+                    {framework.thresholdRule}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-navy-900">Final merits: </span>
+                    {framework.finalMeritsNote}
+                  </p>
+                </div>
+              )}
+
               <p className="text-xs font-semibold text-navy-900">
                 Threshold: satisfy at least {info.minCriteria} of {info.totalCriteria} numbered
-                requirements below, with strong supporting evidence.
+                requirements below, with documentary evidence — profile claims alone are insufficient.
               </p>
 
               <div>
@@ -63,7 +87,27 @@ export default function EligibilityRulesPanel({ categories, compact }: Eligibili
                       <div>
                         <p className="font-medium text-navy-900">{c.title}</p>
                         {!compact && (
-                          <p className="text-slate-600 mt-0.5 text-xs leading-relaxed">{c.description}</p>
+                          <div className="mt-0.5 space-y-1 text-xs leading-relaxed">
+                            <p className="text-slate-600">{c.description}</p>
+                            {c.regulatoryCitation && (
+                              <p className="text-slate-500">
+                                <span className="font-medium text-slate-600">Regulation: </span>
+                                {c.regulatoryCitation}
+                              </p>
+                            )}
+                            {c.evidenceStandard && (
+                              <p className="text-slate-500">
+                                <span className="font-medium text-slate-600">Evidence must show: </span>
+                                {c.evidenceStandard}
+                              </p>
+                            )}
+                            {c.evaluationCaution && (
+                              <p className="text-amber-800/90">
+                                <span className="font-medium">Caution: </span>
+                                {c.evaluationCaution}
+                              </p>
+                            )}
+                          </div>
                         )}
                       </div>
                     </li>

@@ -6,21 +6,19 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { runDeepAnalysisPipeline } from '../lib/analysis-pipeline/run-pipeline'
+import type { PipelineEvent } from '../lib/analysis-pipeline/types'
 import { generateProfileInsights } from '../lib/llm/generate-profile-insights'
-import { generatePersonalizedAnalysis } from '../lib/llm/generate-personalized-analysis'
+import { ensureProfileInsightRows } from '../lib/llm/ensure-profile-insights'
 import {
   assertLlmProvider,
   bumpProfileRevision,
   clearDerivedOutputs,
   isMetaFreshForProfile,
+  LlmOutputRequiredError,
 } from '../lib/llm/llm-output-policy'
-import { isLlmConfigured } from '../lib/llm/generate-profile-insights'
-import { LlmOutputRequiredError } from '../lib/llm/llm-output-policy'
 import { extractTextSnippet } from '../lib/profile-text'
 import { deepExtractResume } from '../lib/resume-deep-extract'
-import { extractProfileSignals } from '../lib/benchmark-report/extract-profile'
-import { deriveDemoMetricCounts, extractProfileMetricCounts } from '../lib/quantified-roadmap'
-import { isLlmOutputRequired } from '../lib/llm/llm-output-policy'
 import { generateBenchmarkReportAsync } from '../lib/benchmark-report'
 import type { BenchmarkReport } from '../types/benchmark-report'
 import { computeUnlocks, type StepUnlockState } from '../lib/assessment-flow'
@@ -105,7 +103,9 @@ interface AssessmentContextValue {
   removeUpload: (id: string) => void
   setCategories: (categories: VisaCategory[]) => void
   toggleCategory: (category: VisaCategory) => void
-  runAnalysis: () => Promise<void>
+  runAnalysis: (options?: {
+    onPipelineEvent?: (event: PipelineEvent) => void
+  }) => Promise<boolean>
   regenerateInsights: () => Promise<void>
   generateReport: () => Promise<void>
   resetAssessment: () => void
@@ -258,12 +258,15 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
         persist({ ...base, profileInsights: rows, llmMeta: meta })
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
+        const { rows } = ensureProfileInsightRows(base, [])
         persist({
           ...base,
+          profileInsights: rows,
           llmMeta: {
-            provider: 'none',
+            provider: base.analysisMeta?.provider === 'gemini' ? 'gemini' : 'groq',
+            model: base.analysisMeta?.model,
             generatedAt: new Date().toISOString(),
-            error: `Insights step failed: ${message}`,
+            error: `Insights LLM failed (${message}); ${rows.length} rows synthesized from analysis.`,
             profileRevision: base.profileRevision,
           },
         })
@@ -274,76 +277,17 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
     [persist],
   )
 
-  const runAnalysis = useCallback(async () => {
-    const structuredProfile = deepExtractResume(state.uploads)
-    const profile = extractProfileSignals(state.uploads)
-
-    const base: AssessmentState = {
-      ...state,
-      ...clearDerivedOutputs(),
-      structuredProfile,
-      profileRevision: state.profileRevision,
-      techDomains: profile.domains.length > 0 ? profile.domains : [],
-    }
-
-    if (!isLlmConfigured()) {
-      persist({
-        ...base,
-        analysisMeta: {
-          provider: 'none',
-          generatedAt: new Date().toISOString(),
-          error: 'Set VITE_GEMINI_API_KEY (AIza…) and/or VITE_GROQ_API_KEY (gsk_) in Netlify or .env',
-          profileRevision: state.profileRevision,
-        },
+  const runAnalysis = useCallback(
+    async (options?: { onPipelineEvent?: (event: PipelineEvent) => void }) => {
+      const { nextState } = await runDeepAnalysisPipeline({
+        state,
+        onEvent: (event) => options?.onPipelineEvent?.(event),
       })
-      return
-    }
-
-    try {
-      const personalized = await generatePersonalizedAnalysis(base)
-
-      let counts = extractProfileMetricCounts({ ...base, ...personalized })
-      const totalCounted = Object.values(counts).reduce((a, b) => a + b, 0)
-      if (totalCounted < 4 && !isLlmOutputRequired()) {
-        counts = deriveDemoMetricCounts(state.uploads.length, state.selectedCategories)
-      }
-
-      const afterLlm: AssessmentState = {
-        ...base,
-        parsedAchievements: personalized.parsedAchievements,
-        evidenceItems: personalized.evidenceItems,
-        criterionResults: personalized.criterionResults,
-        gaps: personalized.gaps,
-        recommendations: personalized.recommendations,
-        riskFlags: personalized.riskFlags,
-        roadmap: personalized.roadmapActions,
-        techDomains: profile.domains,
-        quantifiedRoadmap: { current: counts, computedAt: new Date().toISOString() },
-        analysisComplete: true,
-        analysisMeta: personalized.meta,
-      }
-
-      persist(afterLlm)
-      await runLlmInsights(afterLlm)
-      return
-    } catch (err) {
-      const message =
-        err instanceof LlmOutputRequiredError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : String(err)
-      persist({
-        ...base,
-        analysisMeta: {
-          provider: 'none',
-          generatedAt: new Date().toISOString(),
-          error: message,
-          profileRevision: state.profileRevision,
-        },
-      })
-    }
-  }, [state, persist, runLlmInsights])
+      persist(nextState)
+      return nextState.analysisComplete
+    },
+    [state, persist],
+  )
 
   const regenerateInsights = useCallback(async () => {
     if (!state.analysisComplete) return

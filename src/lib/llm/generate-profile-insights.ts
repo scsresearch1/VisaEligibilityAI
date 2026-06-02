@@ -4,22 +4,20 @@ import type { AssessmentState, LlmRunMeta, ProfileInsightRow } from '../../types
 import { buildProfileContextBlock } from '../profile-text'
 import { buildRuleBasedCriterionDigest, scoreAllCriteria } from '../scientific-assessment/score-criterion'
 import { extractProfileSignals } from '../benchmark-report/extract-profile'
-import { parseInsightsJson } from './parse-response'
+import { parseInsightsJsonLenient } from './parse-response'
 import {
   assertLlmProvider,
-  isLlmOutputRequired,
-  LlmOutputRequiredError,
   stampLlmMeta,
 } from './llm-output-policy'
-import { generateFallbackInsights } from './mock-insights'
 import {
   callLlmForCriticalInsights,
   callLlmForCriticalTask,
   isGeminiReady,
+  isGroqReady,
 } from './llm-router'
 import { getProfileSnippetLimit } from './trim-prompt'
 import { buildInsightsSystemPromptCompact, buildInsightsUserPrompt } from './prompt'
-import { buildInsightsRowsFromAnalysis } from './insights-from-analysis'
+import { ensureProfileInsightRows } from './ensure-profile-insights'
 
 export { isLlmConfigured } from './llm-router'
 
@@ -63,12 +61,14 @@ function buildCompactInsightsContext(state: AssessmentState): string {
   )
 }
 
-function tryParseInsights(text: string): ProfileInsightRow[] {
-  try {
-    return parseInsightsJson(text)
-  } catch {
-    return []
-  }
+function synthesisProvider(): 'gemini' | 'groq' {
+  if (isGeminiReady()) return 'gemini'
+  if (isGroqReady()) return 'groq'
+  return 'gemini'
+}
+
+function synthesisModel(provider: 'gemini' | 'groq'): string {
+  return provider === 'gemini' ? appConfig.llm.geminiModel : appConfig.llm.groqModel
 }
 
 export interface GenerateInsightsResult {
@@ -79,13 +79,42 @@ export interface GenerateInsightsResult {
 export async function generateProfileInsights(
   state: AssessmentState,
 ): Promise<GenerateInsightsResult> {
+  const finish = (
+    rows: ProfileInsightRow[],
+    provider: 'gemini' | 'groq',
+    model: string,
+    note?: string,
+  ): GenerateInsightsResult => {
+    const { rows: guaranteed, source } = ensureProfileInsightRows(state, rows)
+    const notes = [
+      note,
+      source !== 'llm'
+        ? `Strategy rows synthesized from ${source} (LLM parse empty or partial).`
+        : undefined,
+    ].filter(Boolean)
+
+    const meta = stampLlmMeta(
+      {
+        provider,
+        model,
+        generatedAt: new Date().toISOString(),
+        error: notes.length > 0 ? notes.join(' ') : undefined,
+      },
+      state.profileRevision,
+    )
+    assertLlmProvider(meta, 'Profile insights')
+    return { rows: guaranteed, meta }
+  }
+
   if (appConfig.llm.provider === 'off') {
+    const { rows } = ensureProfileInsightRows(state, [])
     return {
-      rows: generateFallbackInsights(state.selectedCategories),
+      rows,
       meta: {
         provider: 'fallback',
         generatedAt: new Date().toISOString(),
-        error: 'LLM provider set to "off" — using rule-based RM template.',
+        error: 'LLM provider set to "off" — using assessment-derived strategy rows.',
+        profileRevision: state.profileRevision,
       },
     }
   }
@@ -108,87 +137,54 @@ export async function generateProfileInsights(
     state.structuredProfile,
   )
 
-  const finish = (
-    rows: ProfileInsightRow[],
-    provider: 'gemini' | 'groq',
-    model: string,
-    note?: string,
-  ): GenerateInsightsResult => {
-    const meta = stampLlmMeta(
-      {
-        provider,
-        model,
-        generatedAt: new Date().toISOString(),
-        error: note,
-      },
-      state.profileRevision,
-    )
-    assertLlmProvider(meta, 'Profile insights')
-    return { rows, meta }
-  }
+  let note: string | undefined
+  let provider: 'gemini' | 'groq' = synthesisProvider()
+  let model = synthesisModel(provider)
+  let llmRows: ProfileInsightRow[] = []
 
   try {
-    let note: string | undefined
-
     const primary = await callLlmForCriticalInsights(profileContext, eligibilityRules)
-    let rows = tryParseInsights(primary.text)
-    let provider = primary.provider
-    let model = primary.model
+    llmRows = parseInsightsJsonLenient(primary.text)
+    provider = primary.provider
+    model = primary.model
     if (primary.note) note = primary.note
 
-    if (rows.length === 0) {
+    if (llmRows.length < 3) {
       const compactUser = buildInsightsUserPrompt(buildCompactInsightsContext(state))
       const compactSystem = buildInsightsSystemPromptCompact(state.selectedCategories)
       const retry = await callLlmForCriticalTask(
         { system: compactSystem, user: compactUser },
         { system: compactSystem, user: compactUser },
       )
-      rows = tryParseInsights(retry.text)
-      provider = retry.provider
-      model = retry.model
-      note = [note, 'Retried insights with compact prompt after empty rows.'].filter(Boolean).join(' ')
+      const retryRows = parseInsightsJsonLenient(retry.text)
+      if (retryRows.length > llmRows.length) {
+        llmRows = retryRows
+        provider = retry.provider
+        model = retry.model
+      }
+      note = [note, 'Retried insights with compact prompt after empty or sparse rows.'].filter(Boolean).join(' ')
     }
 
-    if (rows.length === 0 && state.analysisComplete && state.gaps.length > 0) {
-      rows = buildInsightsRowsFromAnalysis(state)
-      note = [note, 'Built strategy rows from completed analysis gaps/criteria.'].filter(Boolean).join(' ')
-      return finish(rows, provider, model, note)
-    }
-
-    if (rows.length === 0) {
-      throw new Error('LLM returned empty rows array')
-    }
-
-    return finish(rows, provider, model, note)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-
-    if (
-      state.analysisComplete &&
-      (state.gaps.length > 0 || state.criterionResults.length > 0)
-    ) {
-      const rows = buildInsightsRowsFromAnalysis(state)
-      if (rows.length > 0) {
-        return finish(
-          rows,
-          'groq',
-          appConfig.llm.groqModel,
-          `Insights LLM failed (${message}); used analysis-derived rows.`,
-        )
+    if (llmRows.length < 3 && isGeminiReady() && provider !== 'gemini') {
+      const geminiRetry = await callLlmForCriticalInsights(profileContext, eligibilityRules)
+      const geminiRows = parseInsightsJsonLenient(geminiRetry.text)
+      if (geminiRows.length > llmRows.length) {
+        llmRows = geminiRows
+        provider = 'gemini'
+        model = geminiRetry.model
+        note = [note, 'Gemini retry after sparse Groq insights.'].filter(Boolean).join(' ')
       }
     }
 
-    if (isLlmOutputRequired()) {
-      throw err instanceof LlmOutputRequiredError ? err : new LlmOutputRequiredError(message)
-    }
-
-    return {
-      rows: generateFallbackInsights(state.selectedCategories),
-      meta: {
-        provider: 'fallback',
-        generatedAt: new Date().toISOString(),
-        error: message,
-      },
-    }
+    return finish(llmRows, provider, model, note)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    const fallbackProvider = synthesisProvider()
+    return finish(
+      llmRows,
+      fallbackProvider,
+      synthesisModel(fallbackProvider),
+      `Insights LLM error (${message}); guaranteed rows from analysis and official criteria.`,
+    )
   }
 }

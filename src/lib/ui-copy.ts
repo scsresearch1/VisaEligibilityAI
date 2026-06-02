@@ -8,7 +8,7 @@ export const UI_COPY = {
   analysisRunning: 'Analyzing profile and building strategy…',
   reportTitle: 'Benchmark Readiness Report',
   reportGenerate: 'Generate readiness report',
-  reportGenerating: 'Building personalized readiness report…',
+  reportGenerating: 'Synthesizing scientific readiness benchmark…',
   reportDescription:
     'Quantified EB-1 profile-building roadmap aligned with official pathway criteria.',
   dossierTitle: 'Professional Review Dossier',
@@ -28,7 +28,7 @@ export const UI_COPY = {
     'Build new evidence matched to this profile — existing uploads cannot substitute for papers, patents, and products the team must create.',
   recommendationsTitle: 'Evidence build plan',
   recommendationsDescription:
-    'Quantified deliverables the consulting team must produce (publish, file, ship, document) — aligned to this profile. Not a checklist of files to collect.',
+    'Full build plan across publications (SCI/SCOPUS), patents, products, white papers, media, speaking, judging, case studies, documentation, and visibility — quantified per pathway and matched to this profile.',
   uploadPurpose:
     'Uploads profile the candidate for quantification only. Petition evidence is built afterward by the consulting team.',
 } as const

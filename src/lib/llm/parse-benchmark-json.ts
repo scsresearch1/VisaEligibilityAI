@@ -4,6 +4,7 @@ import type {
   BenchmarkRoadmapRow,
 } from '../../types/benchmark-report'
 import {
+  EB1A_ROADMAP_AREAS,
   ensureRoadmapRowOutlines,
   type PersonalizedBenchmarkPayload,
 } from '../benchmark-report/personalized-heuristic'
@@ -46,6 +47,14 @@ function matchArea(area: string): string {
 
 import { extractJsonObject, parseJsonLenient } from './parse-json-lenient'
 
+export function parseBenchmarkJsonLenient(text: string): PersonalizedBenchmarkPayload | null {
+  try {
+    return parseBenchmarkJson(text)
+  } catch {
+    return null
+  }
+}
+
 export function parseBenchmarkJson(text: string): PersonalizedBenchmarkPayload {
   const cleaned = extractJsonObject(text)
 
@@ -81,16 +90,17 @@ export function parseBenchmarkJson(text: string): PersonalizedBenchmarkPayload {
   }
 
   const rawRows = parsed.roadmapTable ?? []
-  if (!Array.isArray(rawRows) || rawRows.length < 8) {
+  if (!Array.isArray(rawRows) || rawRows.length < 4) {
     throw new Error('LLM benchmark missing roadmapTable rows')
   }
 
   const byArea = new Map<string, BenchmarkRoadmapRow>()
   rawRows.forEach((row, i) => {
     const area = matchArea(String(row.area ?? AREA_ORDER[i] ?? 'Unknown'))
+    const def = EB1A_ROADMAP_AREAS.find((d) => matchArea(d.area) === area)
     byArea.set(area, {
-      id: `br-llm-${i}`,
-      area,
+      id: def?.id ?? `br-llm-${i}`,
+      area: def?.area ?? area,
       areaOutline: String(row.areaOutline ?? '').trim(),
       currentScore: clamp(Number(row.currentScore) || 0, 0, 100),
       targetScore: clamp(Number(row.targetScore) || 70, 50, 95),
@@ -102,22 +112,22 @@ export function parseBenchmarkJson(text: string): PersonalizedBenchmarkPayload {
     })
   })
 
-  const roadmapTable: BenchmarkRoadmapRow[] = AREA_ORDER.map((area, i) => {
-    const existing = byArea.get(area)
-    if (existing) return { ...existing, id: `br-${i}` }
+  const roadmapTable: BenchmarkRoadmapRow[] = EB1A_ROADMAP_AREAS.map((def) => {
+    const existing = byArea.get(matchArea(def.area))
+    if (existing) return { ...existing, id: def.id, area: def.area }
     return {
-      id: `br-${i}`,
-      area,
+      id: def.id,
+      area: def.area,
       areaOutline: '',
       currentScore: 15,
-      targetScore: 70,
+      targetScore: def.targetScore,
       quantityToBuild: 2,
-      priority: 'Medium' as BenchmarkPriority,
-      consultingResponsibility: `Build customized evidence for ${area}.`,
+      priority: def.defaultPriority,
+      consultingResponsibility: `Build customized evidence for ${def.area}.`,
     }
   })
 
-  const counselRow = roadmapTable.find((r) => /counsel|attorney-review/i.test(r.area))
+  const counselRow = roadmapTable.find((r) => r.id === 'br-attorney')
   if (counselRow) counselRow.quantityToBuild = 1
 
   const roadmapWithOutlines = ensureRoadmapRowOutlines(roadmapTable)

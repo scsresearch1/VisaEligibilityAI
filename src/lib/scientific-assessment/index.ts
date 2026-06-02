@@ -12,3 +12,10 @@ export {
   buildScientificBenchmarkSystemPrompt,
 } from './prompts'
 export { reconcileScientificAnalysis, type LlmScientificAnalysis } from './reconcile'
+export {
+  buildProfileFactInventory,
+  formatFactInventoryForPrompt,
+  buildCompactCriterionDigest,
+} from './profile-fact-inventory'
+export { validateAndNormalizeLlmAnalysis, textAnchoredInCorpus } from './validate-llm-analysis'
+export { buildScientificAnalysisUserPrompt } from './build-analysis-user-prompt'

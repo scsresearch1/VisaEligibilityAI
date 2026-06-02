@@ -6,21 +6,32 @@ import { sanitizeBenchmarkForDisplay } from '../benchmark-report/sanitize-displa
 import { formatDeliverableSpecForText } from '../action-deliverable-spec'
 import { displayReportFootnote, displaySubmissionReadyStatus } from '../user-facing-labels'
 import type { AttorneyDossierData } from './build-dossier-data'
+import {
+  buildDossierPdfEnrichment,
+  structuredProfileTableRows,
+} from './dossier-pdf-content'
 import type { AssessmentState } from '../../types/assessment'
 import {
   addCoverPage,
   addPartDivider,
   addTableOfContents,
   applyDocumentFooters,
+  getContentWidth,
+  ensureSpace,
   getFinalTableY,
   getPageMargin,
   PDF_COLORS,
+  PDF_TABLE_HEAD,
   slugifyFilename,
   tableStartY,
   triggerPdfDownload,
   writeBullets,
+  writeHighlightBox,
+  writeLegalLead,
   writeParagraphs,
+  writeParsingPhaseBlock,
   writeSectionTitle,
+  writeSubsectionTitle,
 } from './pdf-utils'
 
 const LEGAL_FOOTER =
@@ -32,7 +43,9 @@ export function downloadCombinedAttorneyDossierPdf(
 ): void {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const margin = getPageMargin()
+  const contentW = getContentWidth()
   const report = sanitizeBenchmarkForDisplay(data.report)
+  const enrichment = buildDossierPdfEnrichment(state, { ...data, report })
 
   addCoverPage(doc, {
     title: 'EB-1 Professional Review Dossier',
@@ -46,60 +59,86 @@ export function downloadCombinedAttorneyDossierPdf(
   })
 
   addTableOfContents(doc, [
-    { label: 'Executive Summary & Profile Extraction', page: 3 },
+    { label: 'Executive Summary & Parsing Telemetry', page: 3 },
     { label: 'Part I — Readiness benchmark report', page: 4 },
-    { label: 'Part II — Profile improvement roadmap', page: 0 },
+    { label: 'Part II — Profile improvement roadmap & execution', page: 0 },
     { label: 'Part III — Evidence, gaps, insights & risks', page: 0 },
-    { label: 'Verification package & conclusion', page: 0 },
+    { label: 'Verification package & final conclusion', page: 0 },
   ])
 
   let y = margin + 4
   y = writeSectionTitle(doc, y, 'Executive Summary')
-  y = writeParagraphs(doc, y, [
-    `This dossier consolidates the full readiness benchmark and executable profile-building roadmap for ${data.candidateName} under pathway(s): ${data.pathways}.`,
-    `Current petition readiness index: ${data.readinessScore}/100. Submission-ready status: ${displaySubmissionReadyStatus(report.baseline.attorneyReadyStatus)}. Primary gap: ${report.baseline.primaryGap}.`,
-    `Fundamental model: nothing is satisfied by collecting existing files alone. The consulting team must build ${report.totalAssetsToBuild} new evidence assets (publish papers, file patents, ship products, secure articles/speaking/judging proof) matched to this profile to reach projected readiness of ${report.conclusion.projectedReadinessMin}–${report.conclusion.projectedReadinessMax}/100 prior to professional filing review.`,
-    report.conclusion.summary,
+  y = writeHighlightBox(doc, y, 'Petition readiness snapshot', [
+    `Candidate: ${data.candidateName} · Pathway(s): ${data.pathways}`,
+    `Readiness index: ${data.readinessScore}/100 · Status: ${displaySubmissionReadyStatus(report.baseline.attorneyReadyStatus)}`,
+    `Consulting build mandate: ${report.totalAssetsToBuild} new evidence assets · Primary gap: ${report.baseline.primaryGap}`,
+    `Projected post-execution readiness: ${report.conclusion.projectedReadinessMin}–${report.conclusion.projectedReadinessMax}/100`,
   ])
 
-  y = writeSectionTitle(doc, y, 'Structured profile extraction')
-  y = writeParagraphs(doc, y, data.structuredProfileSummary.split('\n').filter(Boolean))
-
-  if (report.conclusion.positioningThemes.length > 0) {
-    y = writeSectionTitle(doc, y, 'Positioning themes')
-    y = writeBullets(doc, y, report.conclusion.positioningThemes)
-  }
-
-  doc.addPage()
-  y = addPartDivider(doc, 'Part I', 'Readiness benchmark report')
-  y = writeSectionTitle(doc, y, 'I.1 Corrected Evaluation Logic')
-  y = writeParagraphs(doc, y, report.evaluationLogic)
-
-  y = writeSectionTitle(doc, y, 'I.2 Current EB-1 Baseline Assessment')
-  autoTable(doc, {
-    startY: y,
-    margin: { left: margin, right: margin },
-    head: [['Assessment Metric', 'Finding']],
-    body: [
-      ['Readiness Score', `${report.baseline.readinessScore} / 100`],
-      ['Evidence Strength', report.baseline.evidenceStrength],
-      ['Submission-ready status', displaySubmissionReadyStatus(report.baseline.attorneyReadyStatus)],
-      ['Primary Gap', report.baseline.primaryGap],
-      ['Consulting Requirement', report.baseline.consultingRequirement],
-      ['Verification Owner', report.baseline.verificationOwner],
-    ],
-    styles: { fontSize: 8, cellPadding: 2.5 },
-    headStyles: { fillColor: PDF_COLORS.navy, textColor: PDF_COLORS.white, fontStyle: 'bold' },
-    theme: 'grid',
-  })
-  y = getFinalTableY(doc, y + 40)
-
-  y = writeSectionTitle(doc, y, 'I.3 Quantified Roadmap — Build Quantities & Scores')
+  y = writeSectionTitle(doc, y, 'Structured Profile Extraction — Parsing Phase')
+  y = writeParsingPhaseBlock(doc, y, enrichment.parsingStages)
   y = tableStartY(doc, y)
   autoTable(doc, {
     startY: y,
     margin: { left: margin, right: margin },
-    head: [['Roadmap Area', 'Current', 'Target', 'Qty to Build', 'Priority']],
+    tableWidth: contentW,
+    head: [['Profile field', 'Extracted value']],
+    body: structuredProfileTableRows(state.structuredProfile),
+    styles: { fontSize: 8, cellPadding: 2.5, overflow: 'linebreak' },
+    headStyles: PDF_TABLE_HEAD,
+    theme: 'grid',
+  })
+  y = getFinalTableY(doc, y + 24)
+
+  if (report.conclusion.positioningThemes.length > 0) {
+    y = writeSectionTitle(doc, y, 'Strategic positioning themes')
+    y = writeBullets(doc, y, report.conclusion.positioningThemes)
+  }
+
+  doc.addPage()
+  y = addPartDivider(doc, 'Part I', 'Readiness Benchmark Report')
+
+  for (const lead of enrichment.readinessLegalPreamble) {
+    y = writeLegalLead(doc, y, lead)
+  }
+  y += 2
+
+  y = writeSectionTitle(doc, y, 'I.1 Corrected Evaluation Logic')
+  y = writeParagraphs(doc, y, enrichment.evaluationLogicLegal)
+
+  y = writeSectionTitle(doc, y, 'I.2 Current EB-1 Baseline Assessment')
+  y = tableStartY(doc, y)
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    tableWidth: contentW,
+    head: [['Assessment metric', 'Finding (consulting rubric)']],
+    body: [
+      ['Readiness score', `${report.baseline.readinessScore} / 100`],
+      ['Evidence strength', report.baseline.evidenceStrength],
+      ['Submission-ready status', displaySubmissionReadyStatus(report.baseline.attorneyReadyStatus)],
+      ['Primary regulatory gap', report.baseline.primaryGap],
+      ['Consulting requirement', report.baseline.consultingRequirement],
+      ['Verification owner', report.baseline.verificationOwner],
+    ],
+    styles: { fontSize: 8, cellPadding: 2.5, overflow: 'linebreak' },
+    headStyles: PDF_TABLE_HEAD,
+    theme: 'grid',
+  })
+  y = getFinalTableY(doc, y + 36)
+
+  y = writeSectionTitle(doc, y, 'I.3 Profile-Derived Positioning Summary')
+  y = writeHighlightBox(doc, y, 'Available evidence vs. required build portfolio', [
+    enrichment.positioningParagraph,
+  ])
+
+  y = writeSectionTitle(doc, y, 'I.4 Quantified Roadmap — Build Quantities & Scores')
+  y = tableStartY(doc, y)
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    tableWidth: contentW,
+    head: [['Roadmap area', 'Current', 'Target', 'Qty to build', 'Priority']],
     body: report.roadmapTable.map((row) => [
       row.area,
       `${row.currentScore}/100`,
@@ -108,50 +147,114 @@ export function downloadCombinedAttorneyDossierPdf(
       row.priority,
     ]),
     styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
-    headStyles: { fillColor: PDF_COLORS.navy, textColor: PDF_COLORS.white },
+    headStyles: PDF_TABLE_HEAD,
     columnStyles: { 0: { cellWidth: 48 } },
     theme: 'striped',
   })
   y = getFinalTableY(doc, y + 20)
 
-  y = writeSectionTitle(doc, y, 'I.4 Consulting Team Responsibilities by Area')
+  y = writeSubsectionTitle(doc, y, 'Roadmap justifications (per area)')
   for (const row of report.roadmapTable) {
-    y = writeSectionTitle(doc, y, row.area)
-    if (row.areaOutline?.trim()) {
-      doc.setFont('helvetica', 'italic')
-      doc.setFontSize(9)
-      y = writeParagraphs(doc, y, [row.areaOutline])
-      doc.setFont('helvetica', 'normal')
-    }
-    y = writeParagraphs(doc, y, [row.consultingResponsibility])
+    if (!row.quantityToBuild && row.currentScore >= row.targetScore) continue
+    y = writeSubsectionTitle(doc, y, row.area)
+    y = writeBullets(doc, y, enrichment.roadmapJustifications[row.id] ?? [])
   }
 
-  y = writeSectionTitle(doc, y, 'I.5 Minimum Recommended Build Package')
+  y = writeSectionTitle(doc, y, 'I.5 Consulting Team Responsibilities by Area')
+  for (const block of enrichment.consultingAreas) {
+    y = writeSubsectionTitle(doc, y, block.area)
+    if (block.areaOutline?.trim()) {
+      y = writeParagraphs(doc, y, [block.areaOutline])
+    }
+    y = writeParagraphs(doc, y, [block.consultingResponsibility])
+    y = writeSubsectionTitle(doc, y, 'Justification')
+    y = writeBullets(doc, y, block.justifications)
+    y = writeSubsectionTitle(doc, y, 'Profile-aligned recommendations')
+    y = writeBullets(doc, y, block.recommendations)
+  }
+
+  y = writeSectionTitle(doc, y, 'I.6 Minimum Recommended Build Package')
   y = writeBullets(doc, y, report.minimumBuildPackage)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
+  doc.setTextColor(...PDF_COLORS.navy)
+  y = ensureSpace(doc, y, 8)
   doc.text(`Total assets to build: ${report.totalAssetsToBuild}`, margin, y)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(0, 0, 0)
   y += 10
 
-  for (const sec of report.sections) {
-    doc.addPage()
-    y = margin + 6
-    y = writeSectionTitle(doc, y, `I.${sec.number} ${sec.title}`)
-    if (sec.intro) y = writeParagraphs(doc, y, [sec.intro])
-    sec.items?.forEach((item, i) => {
-      y = writeSectionTitle(doc, y, `${i + 1}. ${item.title}`)
-      const parts: string[] = []
-      if (item.purpose) parts.push(`Purpose: ${item.purpose}`)
-      if (item.technicalBasis) parts.push(`Technical basis: ${item.technicalBasis}`)
-      if (item.eb1aContribution) parts.push(`EB-1 contribution: ${item.eb1aContribution}`)
-      if (item.coreModules?.length) {
-        parts.push('Core modules:', ...item.coreModules.map((m) => `  • ${m}`))
-      }
-      y = writeParagraphs(doc, y, parts)
+  if (enrichment.paperItems.length > 0) {
+    y = writeSectionTitle(doc, y, 'I.7 Recommended Papers to Build')
+  }
+  for (const item of enrichment.paperItems) {
+    y = writeSubsectionTitle(doc, y, item.title)
+    y = writeParagraphs(doc, y, [
+      item.purpose ? `Purpose: ${item.purpose}` : '',
+      item.technicalBasis ? `Technical basis: ${item.technicalBasis}` : '',
+      item.eb1aContribution ? `EB-1 contribution: ${item.eb1aContribution}` : '',
+    ].filter(Boolean))
+    y = writeBullets(doc, y, [`Justification: ${item.justification}`])
+  }
+
+  if (enrichment.patentItems.length > 0) {
+    y = writeSectionTitle(doc, y, 'I.8 Recommended Patents to Build')
+  }
+  for (const item of enrichment.patentItems) {
+    y = writeSubsectionTitle(doc, y, item.title)
+    y = writeParagraphs(doc, y, [
+      item.technicalBasis ? `Technical basis: ${item.technicalBasis}` : '',
+      item.eb1aContribution ? `EB-1 contribution: ${item.eb1aContribution}` : '',
+    ].filter(Boolean))
+    y = writeBullets(doc, y, [`Justification: ${item.justification}`])
+  }
+
+  if (enrichment.productItems.length > 0) {
+    y = writeSectionTitle(doc, y, 'I.9 Recommended Products / Prototypes to Build')
+  }
+  for (const item of enrichment.productItems) {
+    y = writeSubsectionTitle(doc, y, item.title)
+    y = writeParagraphs(doc, y, [
+      item.purpose ? `Purpose: ${item.purpose}` : '',
+      item.hwSwCombination ? `Hardware + software: ${item.hwSwCombination}` : '',
+      `Market position: ${item.marketPosition}`,
+      `ROI outline: ${item.roiOutline}`,
+      `Financial impact: ${item.financialImpact}`,
+      `Social impact: ${item.socialImpact}`,
+      item.eb1aContribution ? `EB-1 contribution: ${item.eb1aContribution}` : '',
+    ].filter(Boolean))
+    if (item.keyFeatures?.length) {
+      y = writeSubsectionTitle(doc, y, 'Key features')
+      y = writeBullets(doc, y, item.keyFeatures)
+    }
+    y = writeBullets(doc, y, [`Justification: ${item.justification}`])
+  }
+
+  for (const block of enrichment.supplementaryBlocks) {
+    y = writeSectionTitle(doc, y, block.title)
+    y = writeParagraphs(doc, y, [block.intro])
+    for (const item of block.items) {
+      y = writeSubsectionTitle(doc, y, item.title)
+      y = writeParagraphs(doc, y, [item.detail])
+      y = writeBullets(doc, y, [`Justification: ${item.justification}`])
+    }
+  }
+
+  const criteriaSec = report.sections.find((s) => s.id === 'sec-criteria')
+  if (criteriaSec?.table?.length) {
+    y = writeSectionTitle(doc, y, 'I.16 EB-1A Criteria Improvement Projection')
+    y = tableStartY(doc, y)
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      tableWidth: contentW,
+      head: [['Criterion area', 'Current', 'Build', 'Target']],
+      body: criteriaSec.table.map((t) => [t.label, t.current, t.build, t.target]),
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: PDF_TABLE_HEAD,
+      theme: 'striped',
     })
-    sec.table?.forEach((t) => {
-      y = writeParagraphs(doc, y, [`${t.label}: ${t.current} → ${t.build} → ${t.target}`])
-    })
+    y = getFinalTableY(doc, y + 20)
   }
 
   doc.addPage()
@@ -168,10 +271,12 @@ export function downloadCombinedAttorneyDossierPdf(
       y,
       `${rm.visaCategory} — ${rm.overallCompletionPercent}% benchmark completion (${rm.totalGap} gaps)`,
     )
+    y = tableStartY(doc, y)
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
-      head: [['Metric', 'Current', 'RM Target', 'Gap', 'Status']],
+      tableWidth: contentW,
+      head: [['Metric', 'Current', 'RM target', 'Gap', 'Status']],
       body: rm.metrics.map((m) => [
         m.label,
         String(m.current),
@@ -179,36 +284,51 @@ export function downloadCombinedAttorneyDossierPdf(
         m.met ? '—' : `+${m.gap}`,
         m.met ? 'Target met' : 'Build required',
       ]),
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: PDF_COLORS.navy, textColor: PDF_COLORS.white },
+      styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+      headStyles: PDF_TABLE_HEAD,
       theme: 'striped',
     })
     y = getFinalTableY(doc, y + 30)
   }
 
-  y = writeSectionTitle(doc, y, 'II.2 Prioritized Execution Plan')
-  const sorted = [...data.actions].sort((a, b) => a.priority - b.priority)
-  for (const action of sorted) {
-    y = writeSectionTitle(doc, y, `Priority ${action.priority}: ${action.title}`)
+  y = writeSectionTitle(doc, y, 'II.2 Prioritized Execution Plan (all evidence factors)')
+  for (const entry of enrichment.executionPlan) {
+    y = writeSubsectionTitle(doc, y, `P${entry.priority}: ${entry.title}`)
     y = writeParagraphs(doc, y, [
-      action.domain ? `Domain: ${action.domain}` : '',
-      action.evidenceArea ? `Evidence area: ${action.evidenceArea}` : '',
-      action.deliverableOutline ? `Deliverable: ${action.deliverableOutline}` : '',
-      ...(action.deliverableSpec ? formatDeliverableSpecForText(action.deliverableSpec) : []),
-      action.description,
-      action.profileAnchor ? `Profile anchor: ${action.profileAnchor}` : '',
-      `Timeline: ${action.timeframe} · Type: ${action.category} · Readiness uplift: +${action.expectedReadinessGain}%`,
-      action.visaCategory ? `Pathway: ${action.visaCategory}` : '',
-      action.quantityToBuild != null && action.quantityToBuild > 0
-        ? `Quantity to build: ${action.quantityToBuild}`
-        : '',
-      action.metricGap != null && action.metricGap > 0 ? `Quantified metric gap: +${action.metricGap}` : '',
-    ].filter(Boolean))
+      `Evidence factor: ${entry.factor}`,
+      `Area: ${entry.area}`,
+      `Deliverable: ${entry.deliverable}`,
+      `Timeline: ${entry.timeframe} · Readiness uplift: +${entry.readinessGain}%`,
+    ])
+    y = writeSubsectionTitle(doc, y, 'Justification')
+    y = writeBullets(doc, y, entry.justifications.length ? entry.justifications : ['Profile-matched build required per Part I roadmap.'])
   }
 
-  y = writeSectionTitle(doc, y, 'II.3 Implementation Timeline')
+  const sorted = [...data.actions].sort((a, b) => a.priority - b.priority)
+  if (sorted.length > 0) {
+    y = writeSectionTitle(doc, y, 'II.3 Roadmap action detail register')
+    for (const action of sorted) {
+      y = writeSubsectionTitle(doc, y, `Priority ${action.priority}: ${action.title}`)
+      y = writeParagraphs(doc, y, [
+        action.domain ? `Domain: ${action.domain}` : '',
+        action.evidenceArea ? `Evidence area: ${action.evidenceArea}` : '',
+        action.deliverableOutline ? `Deliverable: ${action.deliverableOutline}` : '',
+        ...(action.deliverableSpec ? formatDeliverableSpecForText(action.deliverableSpec) : []),
+        action.description,
+        action.profileAnchor ? `Profile anchor: ${action.profileAnchor}` : '',
+        `Timeline: ${action.timeframe} · Type: ${action.category} · Readiness uplift: +${action.expectedReadinessGain}%`,
+        action.visaCategory ? `Pathway: ${action.visaCategory}` : '',
+        action.quantityToBuild != null && action.quantityToBuild > 0
+          ? `Quantity to build: ${action.quantityToBuild}`
+          : '',
+        action.metricGap != null && action.metricGap > 0 ? `Quantified metric gap: +${action.metricGap}` : '',
+      ].filter(Boolean))
+    }
+  }
+
+  y = writeSectionTitle(doc, y, 'II.4 Implementation Timeline')
   for (const phase of report.timeline) {
-    y = writeSectionTitle(doc, y, `${phase.phase} (${phase.duration})`)
+    y = writeSubsectionTitle(doc, y, `${phase.phase} (${phase.duration})`)
     y = writeBullets(doc, y, phase.outputs)
   }
 
@@ -221,6 +341,7 @@ export function downloadCombinedAttorneyDossierPdf(
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
+      tableWidth: contentW,
       head: [['Type', 'Summary', 'Domain', 'Confidence']],
       body: state.parsedAchievements.map((a) => [
         a.type,
@@ -229,7 +350,7 @@ export function downloadCombinedAttorneyDossierPdf(
         `${Math.round(a.confidence * 100)}%`,
       ]),
       styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
-      headStyles: { fillColor: PDF_COLORS.navy, textColor: PDF_COLORS.white },
+      headStyles: PDF_TABLE_HEAD,
       theme: 'striped',
     })
     y = getFinalTableY(doc, y + 20)
@@ -247,10 +368,11 @@ export function downloadCombinedAttorneyDossierPdf(
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
+      tableWidth: contentW,
       head: [['Criterion', 'Evidence', 'Strength', 'Source']],
       body: evidenceRows,
       styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
-      headStyles: { fillColor: PDF_COLORS.navy, textColor: PDF_COLORS.white },
+      headStyles: PDF_TABLE_HEAD,
       theme: 'grid',
     })
     y = getFinalTableY(doc, y + 20)
@@ -272,10 +394,11 @@ export function downloadCombinedAttorneyDossierPdf(
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
+      tableWidth: contentW,
       head: [['Pathway', 'Code', 'Criterion', 'Status', 'Strength']],
       body: criteriaRows,
       styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
-      headStyles: { fillColor: PDF_COLORS.navy, textColor: PDF_COLORS.white },
+      headStyles: PDF_TABLE_HEAD,
       theme: 'grid',
     })
     y = getFinalTableY(doc, y + 20)
@@ -287,10 +410,11 @@ export function downloadCombinedAttorneyDossierPdf(
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
+      tableWidth: contentW,
       head: [['Severity', 'Gap', 'Impact']],
       body: state.gaps.map((g) => [g.severity, g.title, String(g.impactScore)]),
       styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
-      headStyles: { fillColor: PDF_COLORS.navy, textColor: PDF_COLORS.white },
+      headStyles: PDF_TABLE_HEAD,
       columnStyles: { 1: { cellWidth: 90 } },
       theme: 'striped',
     })
@@ -305,6 +429,7 @@ export function downloadCombinedAttorneyDossierPdf(
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
+      tableWidth: contentW,
       head: [['Document / asset', 'Purpose', 'Priority', 'Impact %']],
       body: state.recommendations.map((r) => [
         r.documentType.slice(0, 45),
@@ -313,7 +438,7 @@ export function downloadCombinedAttorneyDossierPdf(
         String(r.estimatedImpactPercent),
       ]),
       styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
-      headStyles: { fillColor: PDF_COLORS.navy, textColor: PDF_COLORS.white },
+      headStyles: PDF_TABLE_HEAD,
       theme: 'striped',
     })
     y = getFinalTableY(doc, y + 20)
@@ -325,6 +450,7 @@ export function downloadCombinedAttorneyDossierPdf(
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
+      tableWidth: contentW,
       head: [['Category', 'Actionable items', 'Consulting services', 'Regulatory basis']],
       body: state.profileInsights.map((row) => [
         row.categoryOfficialName.slice(0, 40),
@@ -333,7 +459,7 @@ export function downloadCombinedAttorneyDossierPdf(
         row.sourceStrategicBasis.slice(0, 80),
       ]),
       styles: { fontSize: 6, cellPadding: 2, overflow: 'linebreak' },
-      headStyles: { fillColor: PDF_COLORS.navy, textColor: PDF_COLORS.white },
+      headStyles: PDF_TABLE_HEAD,
       theme: 'grid',
     })
     y = getFinalTableY(doc, y + 20)
@@ -345,6 +471,7 @@ export function downloadCombinedAttorneyDossierPdf(
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
+      tableWidth: contentW,
       head: [['Claim', 'Risk', 'Severity', 'Recommendation']],
       body: state.riskFlags.map((r) => [
         r.claim.slice(0, 60),
@@ -353,7 +480,7 @@ export function downloadCombinedAttorneyDossierPdf(
         r.recommendation.slice(0, 80),
       ]),
       styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
-      headStyles: { fillColor: PDF_COLORS.navy, textColor: PDF_COLORS.white },
+      headStyles: PDF_TABLE_HEAD,
       theme: 'striped',
     })
     y = getFinalTableY(doc, y + 20)
@@ -361,13 +488,13 @@ export function downloadCombinedAttorneyDossierPdf(
 
   doc.addPage()
   y = margin + 6
-  y = writeSectionTitle(doc, y, 'Verification package index')
+  y = writeSectionTitle(doc, y, 'Verification Package Index')
   y = writeBullets(doc, y, report.attorneyPackageItems)
   y = writeParagraphs(doc, y, [report.attorneyPackageTotal])
 
   y = writeSectionTitle(doc, y, 'Final Benchmark Conclusion')
+  y = writeHighlightBox(doc, y, 'Scientific & consulting conclusion', [enrichment.finalConclusion])
   y = writeParagraphs(doc, y, [
-    report.conclusion.summary,
     `Projected readiness after execution: ${report.conclusion.projectedReadinessMin}–${report.conclusion.projectedReadinessMax}/100.`,
     `Projected submission-ready score: ${report.conclusion.projectedAttorneyMin}–${report.conclusion.projectedAttorneyMax}/100.`,
     displayReportFootnote(report),

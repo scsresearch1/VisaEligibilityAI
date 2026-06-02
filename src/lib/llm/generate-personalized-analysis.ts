@@ -21,6 +21,15 @@ import {
   buildScientificAnalysisSystemPromptCompact,
   reconcileScientificAnalysis,
 } from '../scientific-assessment'
+import { buildScientificAnalysisUserPrompt } from '../scientific-assessment/build-analysis-user-prompt'
+import {
+  validateAndNormalizeLlmAnalysis,
+  textAnchoredInCorpus,
+} from '../scientific-assessment/validate-llm-analysis'
+import {
+  buildCompactCriterionDigest,
+  buildProfileFactInventory,
+} from '../scientific-assessment/profile-fact-inventory'
 import { getProfileSnippetLimit } from './trim-prompt'
 import { isLlmConfigured } from './llm-router'
 import {
@@ -111,13 +120,19 @@ export async function generatePersonalizedAnalysis(
     const systemBase = forGroq
       ? buildScientificAnalysisSystemPromptCompact(state.selectedCategories)
       : buildScientificAnalysisSystemPrompt(state.selectedCategories)
-    const system = eligibilityRules ? `${systemBase}\n\n${eligibilityRules}` : systemBase
-    const user = [
-      'Perform full scientific assessment. Output ONLY valid JSON per schema.',
-      'roadmapActions: required — 6–12 prioritized build actions with deliverableSpec grounded in THIS profile only.',
-      'Align criterionEvaluations with the rule-based baseline (±15 points only with cited profile evidence).',
+    const groqCriterionBlock = forGroq
+      ? `\n\n${buildCompactCriterionDigest(state.selectedCategories)}`
+      : ''
+    const system = eligibilityRules
+      ? `${systemBase}${groqCriterionBlock}\n\n${eligibilityRules}`
+      : `${systemBase}${groqCriterionBlock}`
+    const user = buildScientificAnalysisUserPrompt({
+      categories: state.selectedCategories,
       profileContext,
-    ].join('\n\n')
+      profile,
+      structured: state.structuredProfile,
+      forGroq,
+    })
     return { system, user }
   }
 
@@ -128,11 +143,25 @@ export async function generatePersonalizedAnalysis(
     note?: string,
     profileSnippetForSupplement?: string,
   ): Promise<PersonalizedAnalysisResult> => {
-    const parsed = parseAnalysisJson(raw, state.selectedCategories)
+    const parsedRaw = parseAnalysisJson(raw, state.selectedCategories)
+    const parsed = validateAndNormalizeLlmAnalysis(parsedRaw, {
+      categories: state.selectedCategories,
+      profile,
+      ruleScores,
+      structured: state.structuredProfile,
+    })
     const reconciled = reconcileScientificAnalysis(state, profile, ruleScores, parsed, roadmapTable)
     const visa = state.selectedCategories[0] ?? 'EB1A'
 
-    let roadmapFromLlm = parsed.roadmapActions
+    const inventory = buildProfileFactInventory(profile, state.structuredProfile)
+    let roadmapFromLlm = parsedRaw.roadmapActions
+    if (roadmapFromLlm?.length) {
+      roadmapFromLlm = roadmapFromLlm.map((a) => {
+        const anchored =
+          a.profileAnchor && textAnchoredInCorpus(a.profileAnchor, inventory.corpus)
+        return anchored ? a : { ...a, profileAnchor: undefined }
+      })
+    }
     if (!roadmapFromLlm?.length && profileSnippetForSupplement) {
       const supplemental = await supplementRoadmapActionsIfMissing(
         state,
