@@ -256,6 +256,17 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
       try {
         const { rows, meta } = await generateProfileInsights(base)
         persist({ ...base, profileInsights: rows, llmMeta: meta })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        persist({
+          ...base,
+          llmMeta: {
+            provider: 'none',
+            generatedAt: new Date().toISOString(),
+            error: `Insights step failed: ${message}`,
+            profileRevision: base.profileRevision,
+          },
+        })
       } finally {
         setInsightsLoading(false)
       }
@@ -314,6 +325,7 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
 
       persist(afterLlm)
       await runLlmInsights(afterLlm)
+      return
     } catch (err) {
       const message =
         err instanceof LlmOutputRequiredError

@@ -12,7 +12,8 @@ import {
   stampLlmMeta,
 } from './llm-output-policy'
 import { generateFallbackInsights } from './mock-insights'
-import { callLlmForCriticalInsights } from './llm-router'
+import { callLlmForCriticalInsights, isGeminiReady } from './llm-router'
+import { getProfileSnippetLimit } from './trim-prompt'
 
 export { isLlmConfigured } from './llm-router'
 
@@ -62,11 +63,12 @@ export async function generateProfileInsights(
     scoreAllCriteria(state.selectedCategories, profile),
   )
 
+  const snippetLimit = getProfileSnippetLimit(!isGeminiReady())
   const profileContext = buildProfileContextBlock(
     state.uploads.map((u) => ({
       name: u.name,
       category: u.category,
-      textSnippet: u.textSnippet?.slice(0, appConfig.llm.maxProfileChars),
+      textSnippet: u.textSnippet?.slice(0, snippetLimit),
     })),
     state.selectedCategories,
     `${buildAnalysisSummary(state)}\n\n${rubricDigest}`,

@@ -26,17 +26,12 @@ function normalizeCategory(cat?: string): VisaCategory | undefined {
   return undefined
 }
 
+import { extractJsonObject, parseJsonLenient } from './parse-json-lenient'
+
 export function parseInsightsJson(text: string): ProfileInsightRow[] {
-  let cleaned = text.trim()
-  const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (fence) cleaned = fence[1].trim()
+  const cleaned = extractJsonObject(text)
 
-  const start = cleaned.indexOf('{')
-  const end = cleaned.lastIndexOf('}')
-  if (start === -1 || end === -1) throw new Error('No JSON object in LLM response')
-  cleaned = cleaned.slice(start, end + 1)
-
-  const parsed = JSON.parse(cleaned) as { rows?: RawRow[] }
+  const parsed = parseJsonLenient(cleaned, 'Insights') as { rows?: RawRow[] }
   const rows = parsed.rows ?? (Array.isArray(parsed) ? (parsed as RawRow[]) : [])
 
   if (!Array.isArray(rows) || rows.length === 0) {

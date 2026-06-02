@@ -3,7 +3,7 @@ import type { LlmScientificAnalysis } from '../scientific-assessment/reconcile'
 import { isGeminiReady } from './llm-router'
 import { parseAnalysisJson } from './parse-analysis-json'
 import { callGeminiWithPrompts } from './providers/gemini'
-import { callGroqWithPrompts, delayBetweenGroqCalls } from './providers/groq'
+import { callGroqWithPrompts } from './providers/groq'
 
 /**
  * Second call when main JSON omitted roadmapActions. Prefer Gemini to avoid stacking Groq TPM.
@@ -51,7 +51,6 @@ export async function supplementRoadmapActionsIfMissing(
     }
   }
 
-  await delayBetweenGroqCalls()
   try {
     const raw = await callGroqWithPrompts(system, user, 'roadmap-only')
     return tryParse(raw)

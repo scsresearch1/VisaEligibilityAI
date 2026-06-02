@@ -44,16 +44,12 @@ function matchArea(area: string): string {
   return found ?? area
 }
 
-export function parseBenchmarkJson(text: string): PersonalizedBenchmarkPayload {
-  let cleaned = text.trim()
-  const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (fence) cleaned = fence[1].trim()
-  const start = cleaned.indexOf('{')
-  const end = cleaned.lastIndexOf('}')
-  if (start === -1 || end === -1) throw new Error('No JSON object in benchmark LLM response')
-  cleaned = cleaned.slice(start, end + 1)
+import { extractJsonObject, parseJsonLenient } from './parse-json-lenient'
 
-  const parsed = JSON.parse(cleaned) as {
+export function parseBenchmarkJson(text: string): PersonalizedBenchmarkPayload {
+  const cleaned = extractJsonObject(text)
+
+  const parsed = parseJsonLenient(cleaned, 'Benchmark') as {
     baseline?: Record<string, unknown>
     roadmapTable?: Record<string, unknown>[]
     minimumBuildPackage?: string[]

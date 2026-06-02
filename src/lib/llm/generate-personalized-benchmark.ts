@@ -6,9 +6,14 @@ import { buildEligibilityRulesPrompt } from '../../data/eligibility-rules'
 import { extractProfileSignals } from '../benchmark-report/extract-profile'
 import { buildProfileContextBlock } from '../profile-text'
 import { buildRuleBasedCriterionDigest, scoreAllCriteria } from '../scientific-assessment/score-criterion'
-import { buildBenchmarkSystemPrompt, buildBenchmarkUserPrompt } from './benchmark-prompt'
+import {
+  buildBenchmarkSystemPrompt,
+  buildBenchmarkSystemPromptCompact,
+  buildBenchmarkUserPrompt,
+} from './benchmark-prompt'
 import { parseBenchmarkJson } from './parse-benchmark-json'
 import { isLlmConfigured, callLlmForLongTask } from './llm-router'
+import { getProfileSnippetLimit } from './trim-prompt'
 import {
   assertLlmProvider,
   isLlmOutputRequired,
@@ -72,20 +77,28 @@ export async function generatePersonalizedBenchmarkPayload(
   const rubricDigest = buildRuleBasedCriterionDigest(
     scoreAllCriteria(state.selectedCategories, profile),
   )
-  const profileContext = buildProfileContextBlock(
-    state.uploads.map((u) => ({
-      name: u.name,
-      category: u.category,
-      textSnippet: u.textSnippet?.slice(0, appConfig.llm.maxProfileChars),
-    })),
-    state.selectedCategories,
-    `${buildAnalysisSummary(state)}\n\n${rubricDigest}`,
-    state.structuredProfile,
-  )
 
-  const system = buildBenchmarkSystemPrompt(state.selectedCategories, eligibilityRules)
-  const user = buildBenchmarkUserPrompt(profileContext)
-  const prompts = { system, user }
+  const buildContext = (forGroq: boolean) =>
+    buildProfileContextBlock(
+      state.uploads.map((u) => ({
+        name: u.name,
+        category: u.category,
+        textSnippet: u.textSnippet?.slice(0, getProfileSnippetLimit(forGroq)),
+      })),
+      state.selectedCategories,
+      `${buildAnalysisSummary(state)}\n\n${rubricDigest}`,
+      state.structuredProfile,
+      forGroq ? { maxSnippetChars: getProfileSnippetLimit(true), maxTotalChars: 5000 } : undefined,
+    )
+
+  const geminiPrompts = {
+    system: buildBenchmarkSystemPrompt(state.selectedCategories, eligibilityRules),
+    user: buildBenchmarkUserPrompt(buildContext(false)),
+  }
+  const groqPrompts = {
+    system: buildBenchmarkSystemPromptCompact(state.selectedCategories),
+    user: buildBenchmarkUserPrompt(buildContext(true)),
+  }
 
   const finish = (
     payload: PersonalizedBenchmarkPayload,
@@ -110,7 +123,7 @@ export async function generatePersonalizedBenchmarkPayload(
   }
 
   try {
-    const res = await callLlmForLongTask(prompts, prompts)
+    const res = await callLlmForLongTask(groqPrompts, geminiPrompts)
     return finish(parseBenchmarkJson(res.text), res.provider, res.model, res.note)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

@@ -68,3 +68,16 @@ export function buildBenchmarkUserPrompt(profileContext: string): string {
     profileContext,
   ].join('\n\n')
 }
+
+/** Shorter benchmark prompt for Groq token limits. */
+export function buildBenchmarkSystemPromptCompact(categories: VisaCategory[]): string {
+  return [
+    'EB-1 benchmark quantification. Output ONLY valid JSON.',
+    `Pathways: ${categories.join(', ')}.`,
+    'Include: baseline, roadmapTable (12 standard areas), minimumBuildPackage, evaluationLogic, conclusionSummary, projections, positioningThemes.',
+    'Candidate-specific only — no template employers or products.',
+    'Schema (abbreviated):',
+    BENCHMARK_JSON_SCHEMA.slice(0, 2200),
+    '...',
+  ].join('\n')
+}

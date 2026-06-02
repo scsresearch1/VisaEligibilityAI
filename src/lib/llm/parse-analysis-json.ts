@@ -8,20 +8,15 @@ import type {
 } from '../../types/assessment'
 import type { ActionDeliverableSpec } from '../action-deliverable-spec'
 import type { LlmScientificAnalysis } from '../scientific-assessment/reconcile'
+import { extractJsonObject, parseJsonLenient } from './parse-json-lenient'
 
 export function parseAnalysisJson(
   text: string,
   categories: VisaCategory[],
 ): LlmScientificAnalysis & { roadmapActions?: RoadmapAction[] } {
-  let cleaned = text.trim()
-  const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (fence) cleaned = fence[1].trim()
-  const start = cleaned.indexOf('{')
-  const end = cleaned.lastIndexOf('}')
-  if (start === -1) throw new Error('No JSON in analysis response')
-  cleaned = cleaned.slice(start, end + 1)
+  const cleaned = extractJsonObject(text)
 
-  const parsed = JSON.parse(cleaned) as {
+  const parsed = parseJsonLenient(cleaned, 'Analysis') as {
     profileFacts?: Record<string, unknown>
     criterionEvaluations?: Record<string, unknown>[]
     parsedAchievements?: Record<string, unknown>[]

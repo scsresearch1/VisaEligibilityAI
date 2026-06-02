@@ -36,9 +36,14 @@ export function isLlmConfigured(): boolean {
   const { provider } = appConfig.llm
   if (provider === 'off') return false
   if (provider === 'hybrid') return isGeminiReady() || isGroqReady()
-  if (provider === 'gemini') return appConfig.llm.geminiApiKey.trim().length > 0 || isGroqReady()
+  if (provider === 'gemini') return isGeminiReady() || isGroqReady()
   if (provider === 'groq') return isGroqReady()
   return false
+}
+
+function shouldUseGeminiFallback(primaryLabel: string, primaryMsg: string): boolean {
+  if (primaryLabel !== 'Groq' || !isGeminiReady()) return false
+  return isGroqRateLimitError(primaryMsg) || isGroqRequestTooLargeError(primaryMsg)
 }
 
 async function tryGeminiPrompts(system: string, user: string): Promise<LlmTextResult> {
@@ -76,6 +81,9 @@ async function tryGroqInsights(
   profileContext: string,
   eligibilityRules?: string,
 ): Promise<LlmTextResult> {
+  if (!isGroqReady()) {
+    throw new Error(`Groq unavailable. ${groqKeySetupHint()}`)
+  }
   const raw = await callGroq(profileContext, eligibilityRules)
   return { text: raw, provider: 'groq', model: appConfig.llm.groqModel }
 }
@@ -92,8 +100,7 @@ async function withFallback(
   } catch (primaryErr) {
     const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr)
 
-    const shouldFallback =
-      canUseFallback() || (primaryLabel === 'Groq' && isGroqRateLimitError(primaryMsg) && isGeminiReady())
+    const shouldFallback = canUseFallback() || shouldUseGeminiFallback(primaryLabel, primaryMsg)
 
     if (!shouldFallback) {
       const hint = isGroqRequestTooLargeError(primaryMsg)
@@ -159,20 +166,20 @@ export async function callLlmForLongTask(
   }
 
   if (provider === 'groq') {
-    return tryGroqPrompts(groqPrompts.system, groqPrompts.user)
+    return tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis')
   }
 
   if (isGeminiReady()) {
     return withFallback(
       () => tryGeminiPrompts(geminiPrompts.system, geminiPrompts.user),
-      () => tryGroqPrompts(groqPrompts.system, groqPrompts.user),
+      () => tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis'),
       'Gemini',
       'Groq',
       () => isGroqReady(),
     )
   }
   if (isGroqReady()) {
-    return tryGroqPrompts(groqPrompts.system, groqPrompts.user)
+    return tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis')
   }
   throw new LlmOutputRequiredError('No valid LLM API keys configured.')
 }
