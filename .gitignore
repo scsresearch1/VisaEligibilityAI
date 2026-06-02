@@ -9,9 +9,6 @@ lerna-debug.log*
 
 node_modules
 dist
-
-# Local secrets — use app.config.example.ts as template
-src/config/app.config.ts
 dist-ssr
 *.local
 
