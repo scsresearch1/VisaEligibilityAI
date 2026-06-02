@@ -7,6 +7,7 @@ import {
   markGeminiRateLimited,
 } from './gemini-rate-limit'
 import { enqueueGeminiRequest } from './gemini-queue'
+import { validateGeminiApiKey } from '../trim-prompt'
 
 /** Retry same model on transient errors; try next model only on 404 / unsupported. */
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504])
@@ -41,7 +42,7 @@ async function callGeminiModelRaw(
   }
 
   const key = appConfig.llm.geminiApiKey.trim()
-  if (!key) throw new Error('Gemini API key missing — add geminiApiKey in src/config/app.config.ts')
+  validateGeminiApiKey(key)
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
 

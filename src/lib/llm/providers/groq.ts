@@ -1,5 +1,6 @@
 import { appConfig } from '../../../config/app.config'
 import { buildInsightsSystemPrompt, buildInsightsUserPrompt } from '../prompt'
+import { trimGroqPrompts } from '../trim-prompt'
 
 export async function callGroqWithPrompts(
   systemInstruction: string,
@@ -7,6 +8,8 @@ export async function callGroqWithPrompts(
 ): Promise<string> {
   const key = appConfig.llm.groqApiKey.trim()
   if (!key) throw new Error('Groq API key missing — add groqApiKey in src/config/app.config.ts')
+
+  const trimmed = trimGroqPrompts(systemInstruction, userText)
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -18,11 +21,11 @@ export async function callGroqWithPrompts(
       model: appConfig.llm.groqModel,
       temperature: appConfig.llm.temperature ?? 0.2,
       top_p: appConfig.llm.topP ?? 0.9,
-      max_tokens: 8192,
+      max_tokens: 4096,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: systemInstruction },
-        { role: 'user', content: userText },
+        { role: 'system', content: trimmed.system },
+        { role: 'user', content: trimmed.user },
       ],
     }),
   })

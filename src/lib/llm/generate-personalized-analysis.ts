@@ -18,8 +18,10 @@ import { buildProfileContextBlock } from '../profile-text'
 import {
   buildRuleBasedCriterionDigest,
   buildScientificAnalysisSystemPrompt,
+  buildScientificAnalysisSystemPromptCompact,
   reconcileScientificAnalysis,
 } from '../scientific-assessment'
+import { getProfileSnippetLimit, isLikelyGoogleAiStudioKey } from './trim-prompt'
 import { isLlmConfigured } from './generate-profile-insights'
 import {
   assertLlmProvider,
@@ -92,30 +94,41 @@ export async function generatePersonalizedAnalysis(
         profile,
       ).roadmapTable
 
-  const eligibilityRules = buildEligibilityRulesPrompt(state.selectedCategories)
-  const profileContext = buildProfileContextBlock(
-    state.uploads.map((u) => ({
-      name: u.name,
-      category: u.category,
-      textSnippet: u.textSnippet?.slice(0, appConfig.llm.maxProfileChars),
-    })),
-    state.selectedCategories,
-    rubricDigest,
-    state.structuredProfile,
-  )
+  const buildPrompts = (forGroq: boolean) => {
+    const snippetLimit = getProfileSnippetLimit(forGroq)
+    const profileContext = buildProfileContextBlock(
+      state.uploads.map((u) => ({
+        name: u.name,
+        category: u.category,
+        textSnippet: u.textSnippet?.slice(0, snippetLimit),
+      })),
+      state.selectedCategories,
+      rubricDigest,
+      state.structuredProfile,
+      forGroq ? { maxSnippetChars: snippetLimit, maxTotalChars: snippetLimit + 1500 } : undefined,
+    )
+    const eligibilityRules = forGroq ? '' : buildEligibilityRulesPrompt(state.selectedCategories)
+    const systemBase = forGroq
+      ? buildScientificAnalysisSystemPromptCompact(state.selectedCategories)
+      : buildScientificAnalysisSystemPrompt(state.selectedCategories)
+    const system = eligibilityRules ? `${systemBase}\n\n${eligibilityRules}` : systemBase
+    const user = [
+      'Perform full scientific assessment. Output ONLY valid JSON per schema.',
+      'roadmapActions: required — 6–12 prioritized build actions with deliverableSpec grounded in THIS profile only.',
+      'Align criterionEvaluations with the rule-based baseline (±15 points only with cited profile evidence).',
+      profileContext,
+    ].join('\n\n')
+    return { system, user }
+  }
 
-  const system = buildScientificAnalysisSystemPrompt(state.selectedCategories) + '\n\n' + eligibilityRules
-  const user = [
-    'Perform full scientific assessment. Output ONLY valid JSON per schema.',
-    'roadmapActions: required — 6–12 prioritized build actions with deliverableSpec (titles/outlines) grounded in THIS profile only.',
-    'Align criterionEvaluations with the rule-based baseline (±15 points only with cited profile evidence).',
-    profileContext,
-  ].join('\n\n')
+  const geminiKeyOk = isLikelyGoogleAiStudioKey(appConfig.llm.geminiApiKey)
+  const { system, user } = buildPrompts(false)
 
   const applyLlmResponse = (
     raw: string,
     used: 'gemini' | 'groq',
     model: string,
+    note?: string,
   ): PersonalizedAnalysisResult => {
     const parsed = parseAnalysisJson(raw, state.selectedCategories)
     const reconciled = reconcileScientificAnalysis(state, profile, ruleScores, parsed, roadmapTable)
@@ -125,7 +138,12 @@ export async function generatePersonalizedAnalysis(
       : buildPrioritizedActionPlan({ ...state, ...reconciled }, parsed.roadmapActions)
 
     const meta = stampLlmMeta(
-      { provider: used, model, generatedAt: new Date().toISOString() },
+      {
+        provider: used,
+        model,
+        generatedAt: new Date().toISOString(),
+        error: note,
+      },
       state.profileRevision,
     )
     assertLlmProvider(meta, 'Profile analysis')
@@ -138,11 +156,27 @@ export async function generatePersonalizedAnalysis(
   }
 
   try {
-    if (appConfig.llm.provider === 'gemini') {
+    if (appConfig.llm.provider === 'gemini' && geminiKeyOk) {
       const res = await callGeminiWithPrompts(system, user)
       return applyLlmResponse(res.text, 'gemini', res.modelUsed)
     }
-    const raw = await callGroqWithPrompts(system, user)
+    if (appConfig.llm.provider === 'gemini' && appConfig.llm.groqApiKey.trim()) {
+      const groqPrompts = buildPrompts(true)
+      const raw = await callGroqWithPrompts(groqPrompts.system, groqPrompts.user)
+      return applyLlmResponse(
+        raw,
+        'groq',
+        appConfig.llm.groqModel,
+        geminiKeyOk ? undefined : 'Gemini key invalid (use AIza… from Google AI Studio); used Groq.',
+      )
+    }
+    if (appConfig.llm.provider === 'gemini') {
+      throw new LlmOutputRequiredError(
+        'Invalid or missing Gemini API key (need AIza… from https://aistudio.google.com/apikey). Add groqApiKey for fallback.',
+      )
+    }
+    const groqPrompts = buildPrompts(true)
+    const raw = await callGroqWithPrompts(groqPrompts.system, groqPrompts.user)
     return applyLlmResponse(raw, 'groq', appConfig.llm.groqModel)
   } catch (primaryError) {
     const message = primaryError instanceof Error ? primaryError.message : String(primaryError)
@@ -153,7 +187,8 @@ export async function generatePersonalizedAnalysis(
 
     if (appConfig.llm.provider === 'gemini' && appConfig.llm.groqApiKey.trim()) {
       try {
-        const raw = await callGroqWithPrompts(system, user)
+        const groqPrompts = buildPrompts(true)
+        const raw = await callGroqWithPrompts(groqPrompts.system, groqPrompts.user)
         return applyLlmResponse(raw, 'groq', appConfig.llm.groqModel)
       } catch (groqErr) {
         const groqMsg = groqErr instanceof Error ? groqErr.message : String(groqErr)

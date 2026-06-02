@@ -77,6 +77,20 @@ export function buildScientificAnalysisSystemPrompt(categories: VisaCategory[]):
   ].join('\n')
 }
 
+/** Shorter system prompt for Groq TPM limits (fallback path). */
+export function buildScientificAnalysisSystemPromptCompact(categories: VisaCategory[]): string {
+  return [
+    'Scientific EB-1 assessment. Output ONLY valid JSON.',
+    `Pathways: ${categories.join(', ')}.`,
+    'Include: criterionEvaluations (all criteria), parsedAchievements, gaps, recommendations, riskFlags, roadmapActions (6-10) with deliverableSpec.',
+    'roadmapActions: papers→suggestedTitles; patents/product→outline+domain; match candidate field from profile.',
+    'Use rubric baseline in user message; ±15 score adjustment only with cited evidence.',
+    'Schema (abbreviated):',
+    SCIENTIFIC_ANALYSIS_JSON_SCHEMA.slice(0, 2800),
+    '...',
+  ].join('\n')
+}
+
 export const SCIENTIFIC_INSIGHTS_JSON_SCHEMA = `{
   "rows": [{
     "categoryOfficialName": string (official criterion or pathway requirement title),

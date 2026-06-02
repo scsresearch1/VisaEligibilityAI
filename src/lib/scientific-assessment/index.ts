@@ -6,6 +6,7 @@ export {
 } from './score-criterion'
 export {
   buildScientificAnalysisSystemPrompt,
+  buildScientificAnalysisSystemPromptCompact,
   buildScientificInsightsSystemPrompt,
   buildScientificInsightsUserPrompt,
   buildScientificBenchmarkSystemPrompt,

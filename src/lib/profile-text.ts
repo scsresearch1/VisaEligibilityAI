@@ -16,19 +16,23 @@ export function buildProfileContextBlock(
   categories: string[],
   analysisSummary: string,
   structured?: StructuredResumeProfile | null,
+  options?: { maxSnippetChars?: number; maxTotalChars?: number },
 ): string {
+  const snippetLimit = options?.maxSnippetChars ?? 8000
   const docs = uploads
-    .map(
-      (u, i) =>
-        `### Document ${i + 1}: ${u.name} (${u.category})\n${u.textSnippet ?? '(no text extracted)'}`,
-    )
+    .map((u, i) => {
+      const raw = u.textSnippet ?? '(no text extracted)'
+      const body =
+        raw.length > snippetLimit ? `${raw.slice(0, snippetLimit)}\n...[document truncated]` : raw
+      return `### Document ${i + 1}: ${u.name} (${u.category})\n${body}`
+    })
     .join('\n\n')
 
   const structuredBlock = structured
     ? formatStructuredProfileForLlm(structured)
     : '(Structured extraction pending — upload a resume PDF or Word file, then re-scan)'
 
-  return [
+  let block = [
     `Visa pathways selected: ${categories.join(', ') || 'none'}`,
     '',
     structuredBlock,
@@ -39,4 +43,10 @@ export function buildProfileContextBlock(
     '--- Criterion & gap analysis summary ---',
     analysisSummary,
   ].join('\n')
+
+  const maxTotal = options?.maxTotalChars
+  if (maxTotal && block.length > maxTotal) {
+    block = `${block.slice(0, maxTotal)}\n\n...[profile context truncated for token limit]`
+  }
+  return block
 }
