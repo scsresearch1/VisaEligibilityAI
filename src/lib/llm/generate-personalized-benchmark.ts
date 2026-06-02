@@ -8,9 +8,7 @@ import { buildProfileContextBlock } from '../profile-text'
 import { buildRuleBasedCriterionDigest, scoreAllCriteria } from '../scientific-assessment/score-criterion'
 import { buildBenchmarkSystemPrompt, buildBenchmarkUserPrompt } from './benchmark-prompt'
 import { parseBenchmarkJson } from './parse-benchmark-json'
-import { callGeminiWithPrompts } from './providers/gemini'
-import { callGroqWithPrompts } from './providers/groq'
-import { isLlmConfigured } from './generate-profile-insights'
+import { isLlmConfigured, callLlmForLongTask } from './llm-router'
 import {
   assertLlmProvider,
   isLlmOutputRequired,
@@ -87,7 +85,7 @@ export async function generatePersonalizedBenchmarkPayload(
 
   const system = buildBenchmarkSystemPrompt(state.selectedCategories, eligibilityRules)
   const user = buildBenchmarkUserPrompt(profileContext)
-  const provider = appConfig.llm.provider
+  const prompts = { system, user }
 
   const finish = (
     payload: PersonalizedBenchmarkPayload,
@@ -112,34 +110,12 @@ export async function generatePersonalizedBenchmarkPayload(
   }
 
   try {
-    if (provider === 'gemini') {
-      const res = await callGeminiWithPrompts(system, user)
-      return finish(parseBenchmarkJson(res.text), 'gemini', res.modelUsed)
-    }
-    const raw = await callGroqWithPrompts(system, user)
-    return finish(parseBenchmarkJson(raw), 'groq', appConfig.llm.groqModel)
-  } catch (primaryError) {
-    const message = primaryError instanceof Error ? primaryError.message : String(primaryError)
-
-    if (provider === 'gemini' && appConfig.llm.groqApiKey.trim()) {
-      try {
-        const raw = await callGroqWithPrompts(system, user)
-        return finish(
-          parseBenchmarkJson(raw),
-          'groq',
-          appConfig.llm.groqModel,
-          `Gemini failed (${message}); used Groq.`,
-        )
-      } catch (groqErr) {
-        const groqMsg = groqErr instanceof Error ? groqErr.message : String(groqErr)
-        if (isLlmOutputRequired()) {
-          throw new LlmOutputRequiredError(`Gemini failed (${message}); Groq failed (${groqMsg}).`)
-        }
-      }
-    }
-
+    const res = await callLlmForLongTask(prompts, prompts)
+    return finish(parseBenchmarkJson(res.text), res.provider, res.model, res.note)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
     if (isLlmOutputRequired()) {
-      throw new LlmOutputRequiredError(message)
+      throw err instanceof LlmOutputRequiredError ? err : new LlmOutputRequiredError(message)
     }
 
     return {

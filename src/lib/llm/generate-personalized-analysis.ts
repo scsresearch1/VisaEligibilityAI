@@ -21,8 +21,8 @@ import {
   buildScientificAnalysisSystemPromptCompact,
   reconcileScientificAnalysis,
 } from '../scientific-assessment'
-import { getProfileSnippetLimit, isLikelyGoogleAiStudioKey } from './trim-prompt'
-import { isLlmConfigured } from './generate-profile-insights'
+import { getProfileSnippetLimit } from './trim-prompt'
+import { isLlmConfigured } from './llm-router'
 import {
   assertLlmProvider,
   isLlmOutputRequired,
@@ -31,8 +31,7 @@ import {
 } from './llm-output-policy'
 import { normalizeLlmRoadmapActions } from './llm-roadmap'
 import { parseAnalysisJson } from './parse-analysis-json'
-import { callGeminiWithPrompts } from './providers/gemini'
-import { callGroqWithPrompts } from './providers/groq'
+import { callLlmForLongTask } from './llm-router'
 
 export interface PersonalizedAnalysisResult
   extends Pick<
@@ -121,9 +120,6 @@ export async function generatePersonalizedAnalysis(
     return { system, user }
   }
 
-  const geminiKeyOk = isLikelyGoogleAiStudioKey(appConfig.llm.geminiApiKey)
-  const { system, user } = buildPrompts(false)
-
   const applyLlmResponse = (
     raw: string,
     used: 'gemini' | 'groq',
@@ -156,50 +152,16 @@ export async function generatePersonalizedAnalysis(
   }
 
   try {
-    if (appConfig.llm.provider === 'gemini' && geminiKeyOk) {
-      const res = await callGeminiWithPrompts(system, user)
-      return applyLlmResponse(res.text, 'gemini', res.modelUsed)
+    const res = await callLlmForLongTask(buildPrompts(true), buildPrompts(false))
+    return applyLlmResponse(res.text, res.provider, res.model, res.note)
+  } catch (err) {
+    if (err instanceof LlmOutputRequiredError) {
+      throw err
     }
-    if (appConfig.llm.provider === 'gemini' && appConfig.llm.groqApiKey.trim()) {
-      const groqPrompts = buildPrompts(true)
-      const raw = await callGroqWithPrompts(groqPrompts.system, groqPrompts.user)
-      return applyLlmResponse(
-        raw,
-        'groq',
-        appConfig.llm.groqModel,
-        geminiKeyOk ? undefined : 'Gemini key invalid (use AIza… from Google AI Studio); used Groq.',
-      )
-    }
-    if (appConfig.llm.provider === 'gemini') {
-      throw new LlmOutputRequiredError(
-        'Invalid or missing Gemini API key (need AIza… from https://aistudio.google.com/apikey). Add groqApiKey for fallback.',
-      )
-    }
-    const groqPrompts = buildPrompts(true)
-    const raw = await callGroqWithPrompts(groqPrompts.system, groqPrompts.user)
-    return applyLlmResponse(raw, 'groq', appConfig.llm.groqModel)
-  } catch (primaryError) {
-    const message = primaryError instanceof Error ? primaryError.message : String(primaryError)
-
-    if (primaryError instanceof LlmOutputRequiredError) {
-      throw primaryError
-    }
-
-    if (appConfig.llm.provider === 'gemini' && appConfig.llm.groqApiKey.trim()) {
-      try {
-        const groqPrompts = buildPrompts(true)
-        const raw = await callGroqWithPrompts(groqPrompts.system, groqPrompts.user)
-        return applyLlmResponse(raw, 'groq', appConfig.llm.groqModel)
-      } catch (groqErr) {
-        const groqMsg = groqErr instanceof Error ? groqErr.message : String(groqErr)
-        throw new LlmOutputRequiredError(`Gemini failed (${message}); Groq failed (${groqMsg}).`)
-      }
-    }
-
+    const message = err instanceof Error ? err.message : String(err)
     if (isLlmOutputRequired()) {
       throw new LlmOutputRequiredError(message)
     }
-
     return buildHeuristicResult(state)
   }
 }

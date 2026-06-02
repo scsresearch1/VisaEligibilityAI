@@ -1,58 +1,89 @@
-/**
- * Application configuration — edit values here directly.
- * No Netlify env vars or .env — all config lives in this file (committed for deploy).
- */
-export const appConfig = {
-  appName: 'Visa Eligibility AI',
-  tagline: 'Intelligent visa pathway assessment',
-  supportEmail: 'support@example.com',
-
-  /** Firebase — replace with your project values when ready */
-  firebase: {
-    apiKey: 'YOUR_FIREBASE_API_KEY',
-    authDomain: 'YOUR_PROJECT.firebaseapp.com',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_PROJECT.appspot.com',
-    messagingSenderId: '000000000000',
-    appId: '1:000000000000:web:0000000000000000000000',
-  },
-
-  /** API base URL for future backend integration */
-  apiBaseUrl: 'https://api.example.com',
-
-  /** Default login (local / demo — replace when Firebase auth is enabled) */
-  auth: {
-    username: 'admin',
-    password: 'visaadm',
-  },
-
-  /** LLM — Gemini (default) or Groq; keys live here for local + Netlify deploy */
-  llm: {
-    provider: 'gemini' as 'gemini' | 'groq' | 'off',
-    /** Google AI Studio key — must start with AIza (https://aistudio.google.com/apikey) */
-    geminiApiKey: 'YOUR_GEMINI_API_KEY',
-    /** 1.5-flash retired on v1beta — use 2.5/2.0; fallbacks on 404 or 429 */
-    geminiModel: 'gemini-2.5-flash',
-    /** Only used on 404 — not on 429 (same quota). Keep empty to avoid extra calls. */
-    geminiModelFallbacks: [] as string[],
-    groqApiKey: 'YOUR_GROQ_API_KEY',
-    groqModel: 'llama-3.1-8b-instant',
-    maxProfileChars: 8000,
-    groqMaxProfileChars: 4500,
-    groqMaxSystemChars: 5000,
-    groqMaxUserChars: 6000,
-    /** Lower = more consistent rubric scores (0–1) */
-    temperature: 0.2,
-    topP: 0.9,
-    /** When true (default), assessment/report/roadmap must come from LLM — no heuristic fallbacks. */
-    requireLlmOutput: true,
-  },
-
-  /** Feature flags */
-  features: {
-    enableGoogleSignIn: false,
-    enableRegistration: true,
-  },
-} as const
-
-export type AppConfig = typeof appConfig
+/**
+ * Application configuration — loaded from Vite environment variables (VITE_*).
+ * Local: copy .env.example → .env
+ * Netlify: Site settings → Environment variables (see NETLIFY_ENV.md)
+ */
+import { envBool, envCsv, envLlmProvider, envNumber, envString } from './env'
+
+export type { LlmProvider } from './env'
+
+export interface AppConfig {
+  appName: string
+  tagline: string
+  supportEmail: string
+  firebase: {
+    apiKey: string
+    authDomain: string
+    projectId: string
+    storageBucket: string
+    messagingSenderId: string
+    appId: string
+  }
+  apiBaseUrl: string
+  auth: {
+    username: string
+    password: string
+  }
+  llm: {
+    provider: import('./env').LlmProvider
+    geminiApiKey: string
+    geminiModel: string
+    geminiModelFallbacks: string[]
+    groqApiKey: string
+    groqModel: string
+    maxProfileChars: number
+    groqMaxProfileChars: number
+    groqMaxSystemChars: number
+    groqMaxUserChars: number
+    temperature: number
+    topP: number
+    requireLlmOutput: boolean
+  }
+  features: {
+    enableGoogleSignIn: boolean
+    enableRegistration: boolean
+  }
+}
+
+export const appConfig: AppConfig = {
+  appName: envString('VITE_APP_NAME', 'Visa Eligibility AI'),
+  tagline: envString('VITE_APP_TAGLINE', 'Intelligent visa pathway assessment'),
+  supportEmail: envString('VITE_SUPPORT_EMAIL', 'support@example.com'),
+
+  firebase: {
+    apiKey: envString('VITE_FIREBASE_API_KEY'),
+    authDomain: envString('VITE_FIREBASE_AUTH_DOMAIN'),
+    projectId: envString('VITE_FIREBASE_PROJECT_ID'),
+    storageBucket: envString('VITE_FIREBASE_STORAGE_BUCKET'),
+    messagingSenderId: envString('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+    appId: envString('VITE_FIREBASE_APP_ID'),
+  },
+
+  apiBaseUrl: envString('VITE_API_BASE_URL', 'https://api.example.com'),
+
+  auth: {
+    username: envString('VITE_AUTH_USERNAME', 'admin'),
+    password: envString('VITE_AUTH_PASSWORD', 'visaadm'),
+  },
+
+  llm: {
+    provider: envLlmProvider('VITE_LLM_PROVIDER', 'hybrid'),
+    geminiApiKey: envString('VITE_GEMINI_API_KEY'),
+    geminiModel: envString('VITE_GEMINI_MODEL', 'gemini-2.5-flash'),
+    geminiModelFallbacks: envCsv('VITE_GEMINI_MODEL_FALLBACKS'),
+    groqApiKey: envString('VITE_GROQ_API_KEY'),
+    groqModel: envString('VITE_GROQ_MODEL', 'llama-3.1-8b-instant'),
+    maxProfileChars: envNumber('VITE_MAX_PROFILE_CHARS', 8000),
+    groqMaxProfileChars: envNumber('VITE_GROQ_MAX_PROFILE_CHARS', 4500),
+    groqMaxSystemChars: envNumber('VITE_GROQ_MAX_SYSTEM_CHARS', 5000),
+    groqMaxUserChars: envNumber('VITE_GROQ_MAX_USER_CHARS', 6000),
+    temperature: envNumber('VITE_LLM_TEMPERATURE', 0.2),
+    topP: envNumber('VITE_LLM_TOP_P', 0.9),
+    requireLlmOutput: envBool('VITE_REQUIRE_LLM_OUTPUT', true),
+  },
+
+  features: {
+    enableGoogleSignIn: envBool('VITE_ENABLE_GOOGLE_SIGN_IN', false),
+    enableRegistration: envBool('VITE_ENABLE_REGISTRATION', true),
+  },
+}

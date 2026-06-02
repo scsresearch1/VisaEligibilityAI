@@ -4,6 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # LLM & app settings: set VITE_* in Netlify UI (see NETLIFY_ENV.md). Not stored in this file.
 
 [[redirects]]
   from = "/*"

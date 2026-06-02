@@ -5,8 +5,6 @@ import { buildProfileContextBlock } from '../profile-text'
 import { buildRuleBasedCriterionDigest, scoreAllCriteria } from '../scientific-assessment/score-criterion'
 import { extractProfileSignals } from '../benchmark-report/extract-profile'
 import { parseInsightsJson } from './parse-response'
-import { callGemini } from './providers/gemini'
-import { callGroq } from './providers/groq'
 import {
   assertLlmProvider,
   isLlmOutputRequired,
@@ -14,6 +12,9 @@ import {
   stampLlmMeta,
 } from './llm-output-policy'
 import { generateFallbackInsights } from './mock-insights'
+import { callLlmForCriticalInsights } from './llm-router'
+
+export { isLlmConfigured } from './llm-router'
 
 function buildAnalysisSummary(state: Pick<
   AssessmentState,
@@ -72,9 +73,7 @@ export async function generateProfileInsights(
     state.structuredProfile,
   )
 
-  const provider = appConfig.llm.provider
-
-  if (provider === 'off') {
+  if (appConfig.llm.provider === 'off') {
     return {
       rows: generateFallbackInsights(state.selectedCategories),
       meta: {
@@ -86,56 +85,24 @@ export async function generateProfileInsights(
   }
 
   try {
-    let raw: string
-    let model: string
-    let used: 'gemini' | 'groq'
-
-    if (provider === 'gemini') {
-      const gemini = await callGemini(profileContext, eligibilityRules)
-      raw = gemini.text
-      model = gemini.modelUsed
-      used = 'gemini'
-    } else {
-      raw = await callGroq(profileContext, eligibilityRules)
-      model = appConfig.llm.groqModel
-      used = 'groq'
-    }
-
-    const rows = parseInsightsJson(raw)
+    const res = await callLlmForCriticalInsights(profileContext, eligibilityRules)
+    const rows = parseInsightsJson(res.text)
     const meta = stampLlmMeta(
-      { provider: used, model, generatedAt: new Date().toISOString() },
+      {
+        provider: res.provider,
+        model: res.model,
+        generatedAt: new Date().toISOString(),
+        error: res.note,
+      },
       state.profileRevision,
     )
     assertLlmProvider(meta, 'Profile insights')
     return { rows, meta }
-  } catch (primaryError) {
-    const message = primaryError instanceof Error ? primaryError.message : String(primaryError)
-
-    if (provider === 'gemini' && appConfig.llm.groqApiKey.trim()) {
-      try {
-        const raw = await callGroq(profileContext, eligibilityRules)
-        const rows = parseInsightsJson(raw)
-        const meta = stampLlmMeta(
-          {
-            provider: 'groq',
-            model: appConfig.llm.groqModel,
-            generatedAt: new Date().toISOString(),
-            error: `Gemini failed (${message}); used Groq.`,
-          },
-          state.profileRevision,
-        )
-        assertLlmProvider(meta, 'Profile insights')
-        return { rows, meta }
-      } catch (groqErr) {
-        const groqMsg = groqErr instanceof Error ? groqErr.message : String(groqErr)
-        if (isLlmOutputRequired()) {
-          throw new LlmOutputRequiredError(`Gemini failed (${message}); Groq failed (${groqMsg}).`)
-        }
-      }
-    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
 
     if (isLlmOutputRequired()) {
-      throw new LlmOutputRequiredError(message)
+      throw err instanceof LlmOutputRequiredError ? err : new LlmOutputRequiredError(message)
     }
 
     return {
@@ -147,12 +114,4 @@ export async function generateProfileInsights(
       },
     }
   }
-}
-
-export function isLlmConfigured(): boolean {
-  const { provider, geminiApiKey, groqApiKey } = appConfig.llm
-  if (provider === 'off') return false
-  if (provider === 'gemini') return geminiApiKey.trim().length > 0
-  if (provider === 'groq') return groqApiKey.trim().length > 0
-  return false
 }

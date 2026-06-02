@@ -12,8 +12,7 @@ export class LlmOutputRequiredError extends Error {
 /** When true, heuristic / rule-template fallbacks are not written to assessment state. */
 export function isLlmOutputRequired(): boolean {
   if (!isLlmConfigured()) return false
-  const cfg = appConfig.llm as typeof appConfig.llm & { requireLlmOutput?: boolean }
-  return cfg.requireLlmOutput ?? true
+  return appConfig.llm.requireLlmOutput
 }
 
 export function isLlmProvider(meta: LlmRunMeta | null | undefined): boolean {
