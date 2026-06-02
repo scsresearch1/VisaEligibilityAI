@@ -81,7 +81,12 @@ export function parseAnalysisJson(
     recommendation: String(r.recommendation ?? ''),
   }))
 
-  const roadmapActions: RoadmapAction[] = (parsed.roadmapActions ?? []).map((a, i) => {
+  const rawRoadmapList =
+    parsed.roadmapActions ??
+    (parsed as { roadmap?: Record<string, unknown>[] }).roadmap ??
+    (parsed as { actionPlan?: Record<string, unknown>[] }).actionPlan
+
+  const roadmapActions: RoadmapAction[] = (rawRoadmapList ?? []).map((a, i) => {
     const rawSpec = a.deliverableSpec as Record<string, unknown> | undefined
     let deliverableSpec: ActionDeliverableSpec | undefined
     if (rawSpec && typeof rawSpec === 'object') {

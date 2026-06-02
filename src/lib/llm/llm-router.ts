@@ -1,6 +1,6 @@
 import { appConfig } from '../../config/app.config'
 import { callGemini, callGeminiWithPrompts } from './providers/gemini'
-import { callGroq, callGroqWithPrompts } from './providers/groq'
+import { callGroq, callGroqWithPrompts, type GroqPromptSize } from './providers/groq'
 import {
   geminiKeySetupHint,
   groqKeySetupHint,
@@ -48,11 +48,15 @@ async function tryGeminiPrompts(system: string, user: string): Promise<LlmTextRe
   return { text: res.text, provider: 'gemini', model: res.modelUsed }
 }
 
-async function tryGroqPrompts(system: string, user: string): Promise<LlmTextResult> {
+async function tryGroqPrompts(
+  system: string,
+  user: string,
+  size: GroqPromptSize = 'default',
+): Promise<LlmTextResult> {
   if (!isGroqReady()) {
     throw new Error(`Groq unavailable. ${groqKeySetupHint()}`)
   }
-  const raw = await callGroqWithPrompts(system, user)
+  const raw = await callGroqWithPrompts(system, user, size)
   return { text: raw, provider: 'groq', model: appConfig.llm.groqModel }
 }
 
@@ -130,7 +134,7 @@ export async function callLlmForLongTask(
   if (provider === 'hybrid') {
     if (isGroqReady()) {
       return withFallback(
-        () => tryGroqPrompts(groqPrompts.system, groqPrompts.user),
+        () => tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis'),
         () => tryGeminiPrompts(geminiPrompts.system, geminiPrompts.user),
         'Groq',
         'Gemini',

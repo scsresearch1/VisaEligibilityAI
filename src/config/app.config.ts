@@ -39,6 +39,8 @@ export interface AppConfig {
     groqMaxInputTokens: number
     groqMaxInputTokensAggressive: number
     groqMaxCompletionTokens: number
+    groqMaxCompletionTokensLargeJson: number
+    groqMaxCompletionTokensRoadmap: number
     groqMaxCompletionTokensAggressive: number
     temperature: number
     topP: number
@@ -82,10 +84,12 @@ export const appConfig: AppConfig = {
     groqMaxProfileChars: envNumber('VITE_GROQ_MAX_PROFILE_CHARS', 2800),
     groqMaxSystemChars: envNumber('VITE_GROQ_MAX_SYSTEM_CHARS', 2400),
     groqMaxUserChars: envNumber('VITE_GROQ_MAX_USER_CHARS', 2800),
-    groqMaxInputTokens: envNumber('VITE_GROQ_MAX_INPUT_TOKENS', 4200),
+    groqMaxInputTokens: envNumber('VITE_GROQ_MAX_INPUT_TOKENS', 3800),
     groqMaxInputTokensAggressive: envNumber('VITE_GROQ_MAX_INPUT_TOKENS_AGGRESSIVE', 3200),
     groqMaxCompletionTokens: envNumber('VITE_GROQ_MAX_COMPLETION_TOKENS', 1200),
-    groqMaxCompletionTokensAggressive: envNumber('VITE_GROQ_MAX_COMPLETION_TOKENS_AGGRESSIVE', 1024),
+    groqMaxCompletionTokensLargeJson: envNumber('VITE_GROQ_MAX_COMPLETION_TOKENS_LARGE_JSON', 2048),
+    groqMaxCompletionTokensRoadmap: envNumber('VITE_GROQ_MAX_COMPLETION_TOKENS_ROADMAP', 1600),
+    groqMaxCompletionTokensAggressive: envNumber('VITE_GROQ_MAX_COMPLETION_TOKENS_AGGRESSIVE', 1536),
     temperature: envNumber('VITE_LLM_TEMPERATURE', 0.2),
     topP: envNumber('VITE_LLM_TOP_P', 0.9),
     requireLlmOutput: envBool('VITE_REQUIRE_LLM_OUTPUT', true),

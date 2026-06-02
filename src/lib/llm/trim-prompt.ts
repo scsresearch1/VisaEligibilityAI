@@ -22,13 +22,31 @@ export function getProfileSnippetLimit(forGroq: boolean): number {
 }
 
 export type TrimGroqOptions = {
-  /** Second pass after Groq 413 — tighter caps */
   aggressive?: boolean
+  /** Full scientific analysis JSON — reserve more completion tokens */
+  preferLargeJsonBudget?: boolean
+  /** Small roadmap-only follow-up call */
+  preferRoadmapBudget?: boolean
+}
+
+function completionBudgetForTrim(options?: TrimGroqOptions): number {
+  const llm = appConfig.llm
+  const aggressive = options?.aggressive ?? false
+  if (options?.preferLargeJsonBudget) {
+    return aggressive
+      ? (llm.groqMaxCompletionTokensAggressive ?? 1536)
+      : (llm.groqMaxCompletionTokensLargeJson ?? 2048)
+  }
+  if (options?.preferRoadmapBudget) {
+    return aggressive ? 1200 : (llm.groqMaxCompletionTokensRoadmap ?? 1600)
+  }
+  return aggressive
+    ? (llm.groqMaxCompletionTokensAggressive ?? 1024)
+    : (llm.groqMaxCompletionTokens ?? 1200)
 }
 
 /**
  * Cap Groq system + user so input tokens + max_completion stay under on_demand TPM (~6000).
- * Previously used 5k+6k chars (~3k+ tokens each) plus max_tokens=4096 → 6498+ token requests.
  */
 export function trimGroqPrompts(
   system: string,
@@ -37,13 +55,10 @@ export function trimGroqPrompts(
 ): { system: string; user: string } {
   const aggressive = options?.aggressive ?? false
   const llm = appConfig.llm
-
-  const completionBudget = aggressive
-    ? (llm.groqMaxCompletionTokensAggressive ?? 1024)
-    : (llm.groqMaxCompletionTokens ?? 1200)
+  const completionBudget = completionBudgetForTrim(options)
 
   const inputTokenBudget = Math.min(
-    aggressive ? (llm.groqMaxInputTokensAggressive ?? 3200) : (llm.groqMaxInputTokens ?? 4200),
+    aggressive ? (llm.groqMaxInputTokensAggressive ?? 3200) : (llm.groqMaxInputTokens ?? 3800),
     GROQ_ON_DEMAND_REQUEST_TOKEN_LIMIT - completionBudget - 200,
   )
 

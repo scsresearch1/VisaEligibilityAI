@@ -32,6 +32,7 @@ import {
 import { normalizeLlmRoadmapActions } from './llm-roadmap'
 import { parseAnalysisJson } from './parse-analysis-json'
 import { callLlmForLongTask } from './llm-router'
+import { supplementRoadmapActionsIfMissing } from './supplement-roadmap'
 
 export interface PersonalizedAnalysisResult
   extends Pick<
@@ -120,18 +121,32 @@ export async function generatePersonalizedAnalysis(
     return { system, user }
   }
 
-  const applyLlmResponse = (
+  const applyLlmResponse = async (
     raw: string,
     used: 'gemini' | 'groq',
     model: string,
     note?: string,
-  ): PersonalizedAnalysisResult => {
+    profileSnippetForSupplement?: string,
+  ): Promise<PersonalizedAnalysisResult> => {
     const parsed = parseAnalysisJson(raw, state.selectedCategories)
     const reconciled = reconcileScientificAnalysis(state, profile, ruleScores, parsed, roadmapTable)
     const visa = state.selectedCategories[0] ?? 'EB1A'
+
+    let roadmapFromLlm = parsed.roadmapActions
+    if (!roadmapFromLlm?.length && profileSnippetForSupplement) {
+      const supplemental = await supplementRoadmapActionsIfMissing(
+        state,
+        parsed,
+        profileSnippetForSupplement,
+      )
+      if (supplemental?.length) {
+        roadmapFromLlm = supplemental
+      }
+    }
+
     const roadmapActions = isLlmOutputRequired()
-      ? normalizeLlmRoadmapActions(parsed.roadmapActions, visa)
-      : buildPrioritizedActionPlan({ ...state, ...reconciled }, parsed.roadmapActions)
+      ? normalizeLlmRoadmapActions(roadmapFromLlm, visa)
+      : buildPrioritizedActionPlan({ ...state, ...reconciled }, roadmapFromLlm)
 
     const meta = stampLlmMeta(
       {
@@ -152,8 +167,15 @@ export async function generatePersonalizedAnalysis(
   }
 
   try {
-    const res = await callLlmForLongTask(buildPrompts(true), buildPrompts(false))
-    return applyLlmResponse(res.text, res.provider, res.model, res.note)
+    const groqPrompts = buildPrompts(true)
+    const res = await callLlmForLongTask(groqPrompts, buildPrompts(false))
+    return applyLlmResponse(
+      res.text,
+      res.provider,
+      res.model,
+      res.note,
+      groqPrompts.user,
+    )
   } catch (err) {
     if (err instanceof LlmOutputRequiredError) {
       throw err

@@ -26,6 +26,8 @@ interface ImportMetaEnv {
   readonly VITE_GROQ_MAX_INPUT_TOKENS: string
   readonly VITE_GROQ_MAX_INPUT_TOKENS_AGGRESSIVE: string
   readonly VITE_GROQ_MAX_COMPLETION_TOKENS: string
+  readonly VITE_GROQ_MAX_COMPLETION_TOKENS_LARGE_JSON: string
+  readonly VITE_GROQ_MAX_COMPLETION_TOKENS_ROADMAP: string
   readonly VITE_GROQ_MAX_COMPLETION_TOKENS_AGGRESSIVE: string
   readonly VITE_LLM_TEMPERATURE: string
   readonly VITE_LLM_TOP_P: string

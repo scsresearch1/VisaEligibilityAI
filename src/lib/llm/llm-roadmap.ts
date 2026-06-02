@@ -8,7 +8,7 @@ export function normalizeLlmRoadmapActions(
 ): RoadmapAction[] {
   if (!actions?.length) {
     throw new LlmOutputRequiredError(
-      'LLM analysis did not return roadmapActions. Re-run analysis with a valid API key and quota.',
+      'LLM analysis did not return roadmapActions (response may have been truncated). Add a valid VITE_GEMINI_API_KEY (AIza…) for fallback, or redeploy after the latest build.',
     )
   }
 
