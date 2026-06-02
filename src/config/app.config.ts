@@ -29,12 +29,12 @@ export const appConfig = {
   /** LLM — Gemini (default) or Groq; keys live here for local + Netlify deploy */
   llm: {
     provider: 'gemini' as 'gemini' | 'groq' | 'off',
-    geminiApiKey: 'YOUR_GEMINI_API_KEY',
+    geminiApiKey: 'AQ.Ab8RN6LOu-pW3s53UJHd0HwI_zKqN_Y5Saz9kJV7onW8wPhihA',
     /** 1.5-flash retired on v1beta — use 2.5/2.0; fallbacks on 404 or 429 */
     geminiModel: 'gemini-2.5-flash',
     /** Only used on 404 — not on 429 (same quota). Keep empty to avoid extra calls. */
     geminiModelFallbacks: [] as string[],
-    groqApiKey: 'YOUR_GROQ_API_KEY',
+    groqApiKey: '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',
     groqModel: 'llama-3.3-70b-versatile',
     maxProfileChars: 14000,
     /** Lower = more consistent rubric scores (0–1) */
