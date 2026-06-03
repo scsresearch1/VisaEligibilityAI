@@ -39,7 +39,7 @@ export function buildAttorneyDossierData(
     report,
     benchmark: report,
     candidateName: getDisplayCandidateName(state),
-    readinessScore,
+    readinessScore: report.baseline.readinessScore ?? readinessScore,
     pathways: formatVisaCategories(state.selectedCategories),
     generatedAt: report.generatedAt,
     structuredProfileSummary: state.structuredProfile

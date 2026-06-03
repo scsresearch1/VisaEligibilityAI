@@ -4,13 +4,17 @@ import Button from '../ui/Button'
 
 interface ExportPdfButtonProps {
   label?: string
+  loadingLabel?: string
+  errorMessage?: string
   disabled?: boolean
   onExport: () => void | Promise<void>
-  variant?: 'primary' | 'ghost'
+  variant?: 'primary' | 'secondary' | 'ghost'
 }
 
 export default function ExportPdfButton({
   label = 'Export PDF',
+  loadingLabel = 'Generating PDF…',
+  errorMessage = 'Export failed. Please try again.',
   disabled,
   onExport,
   variant = 'ghost',
@@ -23,7 +27,7 @@ export default function ExportPdfButton({
       await onExport()
     } catch (e) {
       console.error(e)
-      window.alert('PDF export failed. Please try again or use Export as .txt.')
+      window.alert(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -32,7 +36,7 @@ export default function ExportPdfButton({
   return (
     <Button variant={variant} size="md" onClick={handleClick} disabled={disabled || loading}>
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-      {loading ? 'Generating PDF…' : label}
+      {loading ? loadingLabel : label}
     </Button>
   )
 }

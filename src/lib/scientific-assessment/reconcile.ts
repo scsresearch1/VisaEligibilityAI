@@ -16,10 +16,10 @@ import {
   buildRecommendationsFromRoadmap,
   buildRiskFlagsFromProfile,
 } from '../analysis-from-profile'
+import { buildHeuristicPersonalizedPayload } from '../benchmark-report/personalized-heuristic'
 import { mergeRecommendationsWithBuildPlan } from '../evidence-build-plan'
 import type { CriterionEvidenceScore } from './score-criterion'
 import { isLlmOutputRequired } from '../llm/llm-output-policy'
-import { LlmOutputRequiredError } from '../llm/llm-output-policy'
 import { evidenceScoreToStrength } from './methodology'
 import { synthesizeGapsFromEvaluations } from './validate-llm-analysis'
 import type { VisaCategory } from '../../types/assessment'
@@ -141,11 +141,15 @@ function mergeGaps(
   llmGaps: GapItem[],
 ): GapItem[] {
   const byCriterion = new Map<string, GapItem>()
+  const uncriterioned: GapItem[] = []
+
   for (const g of ruleGaps) {
     if (g.criterionId) byCriterion.set(g.criterionId, g)
+    else if (g.title?.trim()) uncriterioned.push(g)
   }
   for (const g of llmGaps) {
     if (!g.criterionId || !VALID_CRITERION_IDS.has(g.criterionId)) {
+      if (g.title?.trim()) uncriterioned.push(g)
       continue
     }
     const existing = byCriterion.get(g.criterionId)
@@ -170,7 +174,16 @@ function mergeGaps(
       ),
     })
   }
-  return [...byCriterion.values()]
+
+  const seen = new Set<string>()
+  const extra = uncriterioned.filter((g) => {
+    const key = g.title.toLowerCase().slice(0, 60)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
+  return [...byCriterion.values(), ...extra]
     .sort((a, b) => b.impactScore - a.impactScore)
     .slice(0, 14)
 }
@@ -234,27 +247,20 @@ export function reconcileScientificAnalysis(
   }
 
   let recommendations: DocumentRecommendation[]
-  if (llmOnly) {
-    if (llmRecs.length === 0) {
-      recommendations = mergeRecommendationsWithBuildPlan([], partialForPlan)
-      if (recommendations.length === 0) {
-        throw new LlmOutputRequiredError('LLM returned no recommendations.')
-      }
-    } else {
-      recommendations = mergeRecommendationsWithBuildPlan(llmRecs, partialForPlan).slice(0, 14)
-    }
-  } else {
-    const ruleRecs = buildRecommendationsFromRoadmap(
-      roadmapTable,
-      state.selectedCategories,
-      profile,
-    )
-    const merged = mergeRecommendationsWithBuildPlan(
-      llmRecs.length >= 3 ? llmRecs : [...llmRecs, ...ruleRecs],
-      partialForPlan,
-    )
-    recommendations = merged.length > 0 ? merged : ruleRecs.slice(0, 14)
-  }
+  const heuristicTable =
+    roadmapTable.length > 0
+      ? roadmapTable
+      : buildHeuristicPersonalizedPayload({ ...partialForPlan }, profile).roadmapTable
+  const ruleRecs = buildRecommendationsFromRoadmap(
+    heuristicTable,
+    state.selectedCategories,
+    profile,
+  )
+  const mergedRecs = mergeRecommendationsWithBuildPlan(
+    llmOnly && llmRecs.length >= 3 ? llmRecs : [...llmRecs, ...ruleRecs],
+    partialForPlan,
+  )
+  recommendations = (mergedRecs.length > 0 ? mergedRecs : ruleRecs).slice(0, 14)
 
   let parsedAchievements: ParsedAchievement[]
   if (llm.parsedAchievements.length > 0) {
@@ -275,13 +281,10 @@ export function reconcileScientificAnalysis(
   }
 
   let riskFlags: RiskFlag[]
-  if (llmOnly) {
+  if (llm.riskFlags.length > 0) {
     riskFlags = llm.riskFlags.slice(0, 8)
   } else {
-    riskFlags =
-      llm.riskFlags.length > 0
-        ? llm.riskFlags.slice(0, 8)
-        : buildRiskFlagsFromProfile(profile)
+    riskFlags = buildRiskFlagsFromProfile(profile)
   }
 
   return {

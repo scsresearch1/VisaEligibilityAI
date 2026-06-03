@@ -2,3 +2,4 @@ export { buildAttorneyDossierData, type AttorneyDossierData } from './build-doss
 export { downloadBenchmarkReportPdf } from './export-benchmark-report-pdf'
 export { downloadRoadmapPdf, type RoadmapPdfInput } from './export-roadmap-pdf'
 export { downloadCombinedAttorneyDossierPdf } from './export-combined-dossier-pdf'
+export { downloadCombinedAttorneyDossierWord } from './export-combined-dossier-word'

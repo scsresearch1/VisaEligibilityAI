@@ -8,6 +8,7 @@ import StepNavigation from '../../components/assessment/StepNavigation'
 import Button from '../../components/ui/Button'
 import { buildAttorneyDossierData } from '../../lib/export/build-dossier-data'
 import { downloadCombinedAttorneyDossierPdf } from '../../lib/export/export-combined-dossier-pdf'
+import { downloadCombinedAttorneyDossierWord } from '../../lib/export/export-combined-dossier-word'
 import { formatStepCaption } from '../../lib/assessment-flow'
 import { UI_COPY } from '../../lib/ui-copy'
 
@@ -36,9 +37,9 @@ function DossierContent() {
       </p>
       <h1 className="text-2xl font-bold text-navy-900">{UI_COPY.dossierTitle}</h1>
       <p className="mt-2 text-slate-600 max-w-2xl">
-        Single professional PDF for sharing with immigration counsel — combines the full benchmark
-        report, quantified roadmap, criterion analysis, and verification index in USA consulting
-        standard format.
+        Single professional document for sharing with immigration counsel — combines the full
+        benchmark report, quantified roadmap, criterion analysis, and verification index. Export as
+        PDF or Word (.doc).
       </p>
 
       {!state.reportGenerated ? (
@@ -47,7 +48,7 @@ function DossierContent() {
           <p className="text-navy-900 font-medium">Generate the readiness report first</p>
           <p className="text-sm text-slate-600 mt-2 max-w-lg mx-auto">
             The combined dossier merges your benchmark report and roadmap. Complete the Report step,
-            then return here to preview and export one PDF.
+            then return here to preview and export as PDF or Word.
           </p>
           <Button
             variant="secondary"
@@ -72,14 +73,29 @@ function DossierContent() {
             <ExportPdfButton
               variant="primary"
               label="Export combined dossier (PDF)"
+              loadingLabel="Generating PDF…"
               disabled={!canExport}
               onExport={() => {
                 if (!dossierData) return
                 downloadCombinedAttorneyDossierPdf(dossierData, state)
               }}
             />
+            <ExportPdfButton
+              variant="secondary"
+              label="Export combined dossier (Word)"
+              loadingLabel="Generating Word…"
+              errorMessage="Word export failed. Please try again."
+              disabled={!canExport}
+              onExport={() => {
+                if (!dossierData) return
+                downloadCombinedAttorneyDossierWord(dossierData, state)
+              }}
+            />
             <span className="text-sm text-slate-500">
-              Filename: <code className="text-xs bg-slate-100 px-1 rounded">EB1-Professional-Dossier-*.pdf</code>
+              Filenames:{' '}
+              <code className="text-xs bg-slate-100 px-1 rounded">EB1-Professional-Dossier-*.pdf</code>
+              {' '}or{' '}
+              <code className="text-xs bg-slate-100 px-1 rounded">.doc</code>
             </span>
           </div>
 

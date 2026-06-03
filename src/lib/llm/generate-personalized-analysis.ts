@@ -173,16 +173,29 @@ export async function generatePersonalizedAnalysis(
       }
     }
 
-    const roadmapActions = isLlmOutputRequired()
-      ? normalizeLlmRoadmapActions(roadmapFromLlm, visa)
-      : buildPrioritizedActionPlan({ ...state, ...reconciled }, roadmapFromLlm)
+    const partial = { ...state, ...reconciled }
+    let roadmapActions: RoadmapAction[]
+    let roadmapNote = note
+
+    if (roadmapFromLlm?.length) {
+      roadmapActions = isLlmOutputRequired()
+        ? normalizeLlmRoadmapActions(roadmapFromLlm, visa)
+        : buildPrioritizedActionPlan(partial, roadmapFromLlm)
+    } else {
+      roadmapActions = buildPrioritizedActionPlan(partial)
+      if (isLlmOutputRequired()) {
+        roadmapNote = [note, 'Roadmap synthesized from profile rubric — LLM omitted roadmapActions.']
+          .filter(Boolean)
+          .join(' ')
+      }
+    }
 
     const meta = stampLlmMeta(
       {
         provider: used,
         model,
         generatedAt: new Date().toISOString(),
-        error: note,
+        error: roadmapNote,
       },
       state.profileRevision,
     )
