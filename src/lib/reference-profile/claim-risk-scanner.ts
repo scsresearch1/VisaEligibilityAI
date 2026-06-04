@@ -1,6 +1,11 @@
-import type { ExtractedProfileSignals } from '../benchmark-report/extract-profile'
 import type { RiskFlag } from '../../types/assessment'
 import type { ScannedClaimRisk, ClaimRiskSeverity } from './types'
+
+/** Minimal profile shape for risk scanning — avoids circular imports with extract-profile. */
+export interface ClaimRiskScanProfile {
+  fullText: string
+  keyClaims: string[]
+}
 
 interface RiskPattern {
   re: RegExp
@@ -68,9 +73,9 @@ function severityRank(s: ClaimRiskSeverity): number {
   return { Critical: 0, High: 1, Medium: 2, Low: 3 }[s]
 }
 
-export function scanClaimRisks(profile: ExtractedProfileSignals): ScannedClaimRisk[] {
+export function scanClaimRisksFromText(fullText: string): ScannedClaimRisk[] {
   const hits: ScannedClaimRisk[] = []
-  const lines = profile.fullText.split('\n')
+  const lines = fullText.split('\n')
 
   for (const line of lines) {
     const trimmed = line.trim()
@@ -95,7 +100,11 @@ export function scanClaimRisks(profile: ExtractedProfileSignals): ScannedClaimRi
     .slice(0, 8)
 }
 
-export function claimRisksToRiskFlags(profile: ExtractedProfileSignals): RiskFlag[] {
+export function scanClaimRisks(profile: ClaimRiskScanProfile): ScannedClaimRisk[] {
+  return scanClaimRisksFromText(profile.fullText)
+}
+
+export function claimRisksToRiskFlags(profile: ClaimRiskScanProfile): RiskFlag[] {
   const scanned = scanClaimRisks(profile)
   const anchor =
     profile.keyClaims.length > 0
@@ -151,8 +160,7 @@ export function claimRisksToRiskFlags(profile: ExtractedProfileSignals): RiskFla
 export function extractLegacyRiskyPhrases(
   text: string,
 ): { phrase: string; context: string }[] {
-  const profile = { fullText: text, keyClaims: [] } as unknown as ExtractedProfileSignals
-  return scanClaimRisks(profile).map((r) => ({
+  return scanClaimRisksFromText(text).map((r) => ({
     phrase: r.claim.slice(0, 80),
     context: r.claim,
   }))

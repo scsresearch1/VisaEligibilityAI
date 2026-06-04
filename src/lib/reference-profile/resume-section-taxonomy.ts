@@ -1,6 +1,6 @@
 import type { AssessmentState } from '../../types/assessment'
 import type { ExtractedProfileSignals } from '../benchmark-report/extract-profile'
-import { primaryFieldLabel } from '../benchmark-report/extract-profile'
+import { primaryFieldLabel } from '../profile-field-inference'
 import type { ResumeSectionTaxonomy } from './types'
 
 function uniqueEmployers(profile: ExtractedProfileSignals): string[] {

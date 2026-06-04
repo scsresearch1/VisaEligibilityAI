@@ -4,6 +4,7 @@ import {
   formatProfileKeySignals,
   resolveProfileDomains,
   primaryFieldForDeliverables,
+  primaryFieldLabel,
   pickSubstantiveProfileAnchor,
   isWeakProfileAnchor,
 } from '../profile-field-inference'
@@ -13,11 +14,12 @@ export {
   inferProfessionalDomains,
   resolveProfileDomains,
   primaryFieldForDeliverables,
+  primaryFieldLabel,
   pickSubstantiveProfileAnchor,
   isWeakProfileAnchor,
 }
 import { deepExtractResume, type StructuredResumeProfile } from '../resume-deep-extract'
-import { scanClaimRisks } from '../reference-profile/claim-risk-scanner'
+import { scanClaimRisksFromText } from '../reference-profile/claim-risk-scanner'
 
 export type RiskyPhraseHit = { phrase: string; context: string }
 
@@ -34,34 +36,7 @@ export type ExtractedProfileSignals = StructuredResumeProfile & {
 }
 
 function extractRiskyPhrases(text: string): RiskyPhraseHit[] {
-  const stub = {
-    fullText: text,
-    keyClaims: [],
-    publications: [],
-    patents: [],
-    workExperience: [],
-    education: [],
-    domains: [],
-    keyMetrics: [],
-    awards: [],
-    certifications: [],
-    projects: [],
-    skills: [],
-    riskyPhrases: [],
-    hasPublication: false,
-    hasPatent: false,
-    hasProductClaim: false,
-    hasAward: false,
-    hasLeadership: false,
-    candidateName: '',
-    nameMeta: { value: '', source: 'default' as const, confidence: 'low' as const },
-    contact: {},
-    parsedSections: [],
-    sectionBlocks: [],
-    extractionQuality: 'minimal' as const,
-    sectionsDetected: 0,
-  }
-  return scanClaimRisks(stub as ExtractedProfileSignals).map((r) => ({
+  return scanClaimRisksFromText(text).map((r) => ({
     phrase: r.claim.slice(0, 80),
     context: r.claim,
   }))
@@ -136,9 +111,3 @@ export function extractProfileSignals(uploads: UploadedFile[]): ExtractedProfile
   }
 }
 
-export function primaryFieldLabel(domains: string[], fullText = ''): string {
-  if (domains.length === 0) return 'the candidate\'s field'
-  const first = primaryFieldForDeliverables(domains, fullText)
-  const second = domains.find((d) => d !== first && !/Healthcare|Operations & Supply/i.test(d))
-  return second ? `${first} and ${second}` : first
-}

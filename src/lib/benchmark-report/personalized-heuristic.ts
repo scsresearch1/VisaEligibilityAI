@@ -23,6 +23,9 @@ import {
   mergeInventoryWithCriterionScore,
 } from '../reference-profile/roadmap-inventory-scores'
 import { positioningThemesAsStrings } from '../reference-profile/positioning-themes'
+import { EB1A_ROADMAP_AREAS, outlineForArea, type RoadmapAreaDef } from './roadmap-areas'
+
+export { EB1A_ROADMAP_AREAS, ensureRoadmapRowOutlines } from './roadmap-areas'
 
 const STRENGTH_SCORE: Record<EvidenceStrength, number> = {
   strong: 88,
@@ -31,127 +34,6 @@ const STRENGTH_SCORE: Record<EvidenceStrength, number> = {
   attorney_review: 52,
   unsupported: 22,
   missing: 8,
-}
-
-interface AreaDef {
-  id: string
-  area: string
-  criterionIds: string[]
-  targetScore: number
-  defaultPriority: BenchmarkPriority
-}
-
-export const EB1A_ROADMAP_AREAS: AreaDef[] = [
-  {
-    id: 'br-pub',
-    area: 'Scholarly / Technical Publications',
-    criterionIds: ['eb1a-6'],
-    targetScore: 75,
-    defaultPriority: 'High',
-  },
-  {
-    id: 'br-patent',
-    area: 'Patent / IP Evidence',
-    criterionIds: ['eb1a-5'],
-    targetScore: 70,
-    defaultPriority: 'Critical',
-  },
-  {
-    id: 'br-product',
-    area: 'Product / Technical Artifact',
-    criterionIds: ['eb1a-5'],
-    targetScore: 80,
-    defaultPriority: 'Critical',
-  },
-  {
-    id: 'br-whitepaper',
-    area: 'Technical White Papers',
-    criterionIds: ['eb1a-5', 'eb1a-6'],
-    targetScore: 75,
-    defaultPriority: 'High',
-  },
-  {
-    id: 'br-articles',
-    area: 'Industry Articles / Published Material About Candidate',
-    criterionIds: ['eb1a-3'],
-    targetScore: 65,
-    defaultPriority: 'High',
-  },
-  {
-    id: 'br-speaking',
-    area: 'Conference / Speaking Evidence',
-    criterionIds: ['eb1a-7', 'eb1a-8'],
-    targetScore: 65,
-    defaultPriority: 'High',
-  },
-  {
-    id: 'br-judging',
-    area: 'Judging / Reviewing Evidence',
-    criterionIds: ['eb1a-4'],
-    targetScore: 60,
-    defaultPriority: 'Medium',
-  },
-  {
-    id: 'br-expert',
-    area: 'Expert Profile / Recognition Assets',
-    criterionIds: ['eb1a-1', 'eb1a-11'],
-    targetScore: 75,
-    defaultPriority: 'Critical',
-  },
-  {
-    id: 'br-case',
-    area: 'Case-Study Style Technical Narratives',
-    criterionIds: ['eb1a-5', 'eb1a-8'],
-    targetScore: 75,
-    defaultPriority: 'High',
-  },
-  {
-    id: 'br-proddoc',
-    area: 'Product Documentation and Validation Reports',
-    criterionIds: ['eb1a-5'],
-    targetScore: 75,
-    defaultPriority: 'Critical',
-  },
-  {
-    id: 'br-visibility',
-    area: 'Citation / Visibility Development',
-    criterionIds: ['eb1a-6', 'eb1a-3'],
-    targetScore: 55,
-    defaultPriority: 'Medium',
-  },
-  {
-    id: 'br-attorney',
-    area: 'Professional Review Package',
-    criterionIds: [],
-    targetScore: 85,
-    defaultPriority: 'Critical',
-  },
-]
-
-const AREA_OUTLINE: Record<string, string> = {
-  'br-pub': 'Peer-reviewed or indexed technical publications',
-  'br-patent': 'Patent concepts, filings, or IP documentation',
-  'br-product': 'Demonstrable prototypes or technical artifacts',
-  'br-whitepaper': 'Structured white papers and technical frameworks',
-  'br-articles': 'Third-party articles featuring the candidate',
-  'br-speaking': 'Speaking, webinars, and conference evidence',
-  'br-judging': 'Peer review, panels, and judging documentation',
-  'br-expert': 'Expert profile and recognition assets',
-  'br-case': 'Sanitized technical case studies',
-  'br-proddoc': 'Product validation and architecture documentation',
-  'br-visibility': 'Citations, indexing, and professional visibility',
-  'br-attorney': 'Consolidated professional review dossier and claim map',
-}
-
-function outlineForArea(def: AreaDef): string {
-  return AREA_OUTLINE[def.id] ?? `Evidence build: ${def.area}`
-}
-
-export function ensureRoadmapRowOutlines(rows: BenchmarkRoadmapRow[]): BenchmarkRoadmapRow[] {
-  return rows.map((r) => ({
-    ...r,
-    areaOutline: r.areaOutline?.trim() || AREA_OUTLINE[r.id] || `Evidence build: ${r.area}`,
-  }))
 }
 
 function isCounselReviewArea(area: string): boolean {
@@ -179,7 +61,7 @@ function quantityFromGap(current: number, target: number, profile: ExtractedProf
 }
 
 function priorityForRow(
-  def: AreaDef,
+  def: RoadmapAreaDef,
   current: number,
   qty: number,
   state: AssessmentState,
@@ -195,7 +77,7 @@ function priorityForRow(
 }
 
 function responsibilityForArea(
-  def: AreaDef,
+  def: RoadmapAreaDef,
   profile: ExtractedProfileSignals,
   qty: number,
 ): string {

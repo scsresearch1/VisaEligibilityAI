@@ -8,10 +8,9 @@ import { buildEvidenceBuildPlan } from '../evidence-build-plan'
 import { formatFactInventoryForPrompt, buildProfileFactInventory } from '../scientific-assessment/profile-fact-inventory'
 import {
   buildHeuristicPersonalizedPayload,
-  EB1A_ROADMAP_AREAS,
-  ensureRoadmapRowOutlines,
   type PersonalizedBenchmarkPayload,
 } from './personalized-heuristic'
+import { EB1A_ROADMAP_AREAS, ensureRoadmapRowOutlines } from './roadmap-areas'
 import { computeScientificReadinessBaseline, projectReadinessAfterBuild } from './compute-readiness-baseline'
 import { extractProfileSignals } from './extract-profile'
 import {

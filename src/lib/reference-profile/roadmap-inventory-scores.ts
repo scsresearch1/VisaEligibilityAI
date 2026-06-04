@@ -1,6 +1,6 @@
 import type { AssessmentState, ProfileMetricCounts } from '../../types/assessment'
 import type { ExtractedProfileSignals } from '../benchmark-report/extract-profile'
-import { EB1A_ROADMAP_AREAS } from '../benchmark-report/personalized-heuristic'
+import { EB1A_ROADMAP_AREAS } from '../benchmark-report/roadmap-areas'
 import { extractProfileMetricCounts } from '../quantified-roadmap'
 import { detectProfileArchetype } from './profile-archetype'
 

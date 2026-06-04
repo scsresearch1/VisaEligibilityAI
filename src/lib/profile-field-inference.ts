@@ -156,6 +156,14 @@ export function resolveProfileDomains(
 }
 
 /** Single field label for titles, media angles, and action cards. */
+/** Human-readable field label for prompts, gaps, and dossier copy. */
+export function primaryFieldLabel(domains: string[], fullText = ''): string {
+  if (domains.length === 0) return 'the candidate\'s field'
+  const first = primaryFieldForDeliverables(domains, fullText)
+  const second = domains.find((d) => d !== first && !/Healthcare|Operations & Supply/i.test(d))
+  return second ? `${first} and ${second}` : first
+}
+
 export function primaryFieldForDeliverables(
   domains: string[],
   fullText = '',

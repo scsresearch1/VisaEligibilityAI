@@ -1,5 +1,5 @@
 import type { ExtractedProfileSignals } from '../benchmark-report/extract-profile'
-import { primaryFieldLabel } from '../benchmark-report/extract-profile'
+import { primaryFieldLabel } from '../profile-field-inference'
 import { detectProfileArchetype } from './profile-archetype'
 
 export interface PositioningThemeRow {
