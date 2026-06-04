@@ -12,6 +12,7 @@ import BenchmarkReportEngine from '../../components/assessment/BenchmarkReportEn
 import ProfileInsightsTable from '../../components/assessment/ProfileInsightsTable'
 import { appConfig } from '../../config/app.config'
 import BuildPrincipleBanner from '../../components/assessment/BuildPrincipleBanner'
+import { formatLlmMetaForDisplay } from '../../lib/llm/format-llm-meta'
 import { displayPersonalizationNote, sanitizeProfileInsightRow } from '../../lib/user-facing-labels'
 import { UI_COPY } from '../../lib/ui-copy'
 
@@ -31,7 +32,7 @@ function ReportContent() {
     benchmarkReport,
     readinessScore,
   } = useAssessment()
-  const reportMetaNote = state.llmMeta?.error
+  const reportMetaNote = formatLlmMetaForDisplay(state.llmMeta?.error, 'report')
   const [showHidden, setShowHidden] = useState(false)
   const [showSupplementary, setShowSupplementary] = useState(false)
   const advanced = showAdvancedInsights(state.reportGenerated)
@@ -126,8 +127,14 @@ function ReportContent() {
           )}
 
           {reportMetaNote && (
-            <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              {reportMetaNote}
+            <p
+              className={`mt-4 rounded-lg border px-4 py-3 text-sm ${
+                reportMetaNote.level === 'warn'
+                  ? 'border-amber-200 bg-amber-50 text-amber-950'
+                  : 'border-slate-200 bg-slate-50 text-slate-700'
+              }`}
+            >
+              {reportMetaNote.message}
             </p>
           )}
 

@@ -42,6 +42,8 @@ export interface AppConfig {
     groqMaxCompletionTokensLargeJson: number
     groqMaxCompletionTokensRoadmap: number
     groqMaxCompletionTokensAggressive: number
+    /** Minimum ms between queued Groq calls (free tier TPM). */
+    groqMinGapMs: number
     temperature: number
     topP: number
     requireLlmOutput: boolean
@@ -90,6 +92,7 @@ export const appConfig: AppConfig = {
     groqMaxCompletionTokensLargeJson: envNumber('VITE_GROQ_MAX_COMPLETION_TOKENS_LARGE_JSON', 1800),
     groqMaxCompletionTokensRoadmap: envNumber('VITE_GROQ_MAX_COMPLETION_TOKENS_ROADMAP', 1400),
     groqMaxCompletionTokensAggressive: envNumber('VITE_GROQ_MAX_COMPLETION_TOKENS_AGGRESSIVE', 1536),
+    groqMinGapMs: envNumber('VITE_GROQ_MIN_GAP_MS', 9000),
     temperature: envNumber('VITE_LLM_TEMPERATURE', 0.2),
     topP: envNumber('VITE_LLM_TOP_P', 0.9),
     requireLlmOutput: envBool('VITE_REQUIRE_LLM_OUTPUT', true),

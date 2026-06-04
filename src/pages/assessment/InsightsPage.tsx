@@ -9,7 +9,7 @@ import StepNavigation from '../../components/assessment/StepNavigation'
 import { generateBenchmarkReport } from '../../lib/benchmark-report'
 import Button from '../../components/ui/Button'
 import { UI_COPY } from '../../lib/ui-copy'
-import { sanitizeUserFacingText } from '../../lib/user-facing-labels'
+import { formatLlmMetaForDisplay } from '../../lib/llm/format-llm-meta'
 
 export default function InsightsPage() {
   return (
@@ -22,6 +22,7 @@ export default function InsightsPage() {
 function InsightsContent() {
   const { state, regenerateInsights, insightsLoading } = useAssessment()
   const meta = state.llmMeta
+  const metaDisplay = formatLlmMetaForDisplay(meta?.error, 'insights')
   const extraction = state.structuredProfile?.extractionQuality
   const benchmarkPreview =
     state.selectedCategories.includes('EB1A') && state.analysisComplete
@@ -65,10 +66,16 @@ function InsightsContent() {
         </div>
       )}
 
-      {meta?.error && (
-        <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      {metaDisplay && (
+        <div
+          className={`mt-4 flex items-start gap-2 rounded-xl border px-4 py-3 text-sm ${
+            metaDisplay.level === 'warn'
+              ? 'border-amber-200 bg-amber-50 text-amber-900'
+              : 'border-slate-200 bg-slate-50 text-slate-700'
+          }`}
+        >
           <AlertCircle className="h-5 w-5 shrink-0" />
-          <span>{sanitizeUserFacingText(meta.error)}</span>
+          <span>{metaDisplay.message}</span>
         </div>
       )}
 

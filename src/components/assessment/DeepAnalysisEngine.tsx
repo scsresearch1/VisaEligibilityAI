@@ -150,7 +150,7 @@ export default function DeepAnalysisEngine({
             </h2>
             <p className="mt-2 text-sm text-white/65 leading-relaxed">
               Multi-stage pipeline: deterministic CV segmentation, entity signal graph, 8 CFR
-              rule-engine scoring, then hybrid LLM reconciliation (Groq long-context + Gemini
+              rule-engine scoring, then hybrid LLM reconciliation (Gemini long JSON + Groq
               critical reasoning) — profile facts only, no assumed credentials.
             </p>
           </div>

@@ -7,6 +7,7 @@ import {
   isLikelyGoogleAiStudioKey,
   isGroqRateLimitError,
   isGroqRequestTooLargeError,
+  isGroqTruncatedError,
 } from './trim-prompt'
 import { isLlmOutputRequired, LlmOutputRequiredError } from './llm-output-policy'
 
@@ -43,7 +44,11 @@ export function isLlmConfigured(): boolean {
 
 function shouldUseGeminiFallback(primaryLabel: string, primaryMsg: string): boolean {
   if (primaryLabel !== 'Groq' || !isGeminiReady()) return false
-  return isGroqRateLimitError(primaryMsg) || isGroqRequestTooLargeError(primaryMsg)
+  return (
+    isGroqRateLimitError(primaryMsg) ||
+    isGroqRequestTooLargeError(primaryMsg) ||
+    isGroqTruncatedError(primaryMsg)
+  )
 }
 
 async function tryGeminiPrompts(system: string, user: string): Promise<LlmTextResult> {
@@ -132,7 +137,8 @@ async function withFallback(
 }
 
 /**
- * Long workloads (full analysis, benchmark): Groq first (on_demand 6k token cap), Gemini fallback.
+ * Long workloads (full analysis, benchmark): Gemini first when available (avoids Groq 6k TPM);
+ * Groq fallback for hybrid without Gemini or explicit groq-only with Gemini escape hatch.
  */
 export async function callLlmForLongTask(
   groqPrompts: LlmPromptPair,
@@ -145,19 +151,19 @@ export async function callLlmForLongTask(
   }
 
   if (provider === 'hybrid') {
-    if (isGroqReady()) {
+    if (isGeminiReady()) {
       return withFallback(
-        () => tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis'),
         () => tryGeminiPrompts(geminiPrompts.system, geminiPrompts.user),
-        'Groq',
+        () => tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis'),
         'Gemini',
-        () => isGeminiReady(),
+        'Groq',
+        () => isGroqReady(),
       )
     }
-    if (isGeminiReady()) {
+    if (isGroqReady()) {
       return {
-        ...(await tryGeminiPrompts(geminiPrompts.system, geminiPrompts.user)),
-        note: 'Groq key missing; used Gemini for long task.',
+        ...(await tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis')),
+        note: 'Gemini key missing; used Groq for long task.',
       }
     }
     throw new LlmOutputRequiredError(
@@ -166,6 +172,15 @@ export async function callLlmForLongTask(
   }
 
   if (provider === 'groq') {
+    if (isGeminiReady()) {
+      return withFallback(
+        () => tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis'),
+        () => tryGeminiPrompts(geminiPrompts.system, geminiPrompts.user),
+        'Groq',
+        'Gemini',
+        () => true,
+      )
+    }
     return tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis')
   }
 

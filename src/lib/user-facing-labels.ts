@@ -15,8 +15,6 @@ const HIDDEN_TERMS: [RegExp, string][] = [
   [/\battorney\b/gi, 'professional'],
   [/\bcounsel\b/gi, 'professional'],
   [/\bLLM\b/gi, 'profile intelligence'],
-  [/\bGemini\b/gi, 'analysis engine'],
-  [/\bGroq\b/gi, 'analysis engine'],
   [/\bAPI key\b/gi, 'configuration'],
   [/\bVEAI-[A-Z0-9-]+\b/g, ''],
   [/\s{2,}/g, ' '],

@@ -1,5 +1,10 @@
+import { appConfig } from '../../../config/app.config'
+
 /** Serialize Groq calls and space them apart — free tier is ~6000 TPM. */
-const MIN_GAP_MS = 4500
+function minGapMs(): number {
+  const configured = appConfig.llm.groqMinGapMs
+  return configured > 0 ? configured : 9000
+}
 
 let chain: Promise<unknown> = Promise.resolve()
 let lastGroqFinishTime = 0
@@ -9,11 +14,12 @@ function sleep(ms: number): Promise<void> {
 }
 
 export function enqueueGroqRequest<T>(fn: () => Promise<T>): Promise<T> {
+  const gap = minGapMs()
   const run = chain.then(async () => {
     if (lastGroqFinishTime > 0) {
       const elapsed = Date.now() - lastGroqFinishTime
-      if (elapsed < MIN_GAP_MS) {
-        await sleep(MIN_GAP_MS - elapsed)
+      if (elapsed < gap) {
+        await sleep(gap - elapsed)
       }
     }
     try {
@@ -24,8 +30,8 @@ export function enqueueGroqRequest<T>(fn: () => Promise<T>): Promise<T> {
   }, async () => {
     if (lastGroqFinishTime > 0) {
       const elapsed = Date.now() - lastGroqFinishTime
-      if (elapsed < MIN_GAP_MS) {
-        await sleep(MIN_GAP_MS - elapsed)
+      if (elapsed < gap) {
+        await sleep(gap - elapsed)
       }
     }
     try {
@@ -43,6 +49,6 @@ export function enqueueGroqRequest<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /** @deprecated Queue enforces spacing; kept for explicit post-analysis pause. */
-export function delayBetweenGroqCalls(ms = MIN_GAP_MS): Promise<void> {
-  return sleep(ms)
+export function delayBetweenGroqCalls(ms?: number): Promise<void> {
+  return sleep(ms ?? minGapMs())
 }

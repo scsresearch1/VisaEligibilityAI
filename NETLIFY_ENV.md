@@ -8,7 +8,7 @@ Vite only exposes variables prefixed with `VITE_`. They are embedded at **build 
 
 | Variable | Value to set | Notes |
 |----------|----------------|-------|
-| `VITE_LLM_PROVIDER` | `hybrid` | Groq for long tasks; Gemini for insights |
+| `VITE_LLM_PROVIDER` | `hybrid` | Gemini for long JSON tasks; Groq fallback; insights prefer Gemini |
 | `VITE_GEMINI_API_KEY` | Your Google AI Studio key (`AIza…`) | [Create key](https://aistudio.google.com/apikey) |
 | `VITE_GROQ_API_KEY` | Your Groq key (`gsk_…`) | [Groq console](https://console.groq.com) |
 | `VITE_REQUIRE_LLM_OUTPUT` | `true` | No heuristic fallback for assessments |
@@ -27,7 +27,9 @@ Vite only exposes variables prefixed with `VITE_`. They are embedded at **build 
 | `VITE_GROQ_MAX_INPUT_TOKENS` | `4200` |
 | `VITE_GROQ_MAX_INPUT_TOKENS_AGGRESSIVE` | `3200` |
 | `VITE_GROQ_MAX_COMPLETION_TOKENS` | `1200` (not 4096 — counts toward 6k limit) |
+| `VITE_GROQ_MAX_COMPLETION_TOKENS_LARGE_JSON` | `1600` |
 | `VITE_GROQ_MAX_COMPLETION_TOKENS_AGGRESSIVE` | `1024` |
+| `VITE_GROQ_MIN_GAP_MS` | `9000` (space between Groq calls; reduces 429 TPM errors) |
 | `VITE_LLM_TEMPERATURE` | `0.2` |
 | `VITE_LLM_TOP_P` | `0.9` |
 

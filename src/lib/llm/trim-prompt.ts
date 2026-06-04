@@ -91,16 +91,21 @@ export function isGroqRequestTooLargeError(message: string): boolean {
 
 /** Groq 429 — TPM/RPM exceeded (often from two big calls within one minute). */
 export function isGroqRateLimitError(message: string): boolean {
-  return /429|rate limit reached/i.test(message)
+  return /429|rate limit reached|tokens per minute/i.test(message)
 }
 
-/** Parse "Please try again in 3.62s" from Groq error body. */
-export function parseGroqRetryDelayMs(message: string): number {
+/** Response ended because max_tokens was hit — JSON is often unusable. */
+export function isGroqTruncatedError(message: string): boolean {
+  return /truncated|max_tokens|JSON incomplete|finish_reason.*length/i.test(message)
+}
+
+/** Parse "Please try again in 3.62s" from Groq error body; apply exponential backoff by attempt. */
+export function parseGroqRetryDelayMs(message: string, attempt = 0): number {
   const match = message.match(/try again in ([\d.]+)\s*s/i)
-  if (match) {
-    return Math.ceil(parseFloat(match[1]) * 1000) + 800
-  }
-  return 5000
+  const fromBody = match ? Math.ceil(parseFloat(match[1]) * 1000) + 1200 : 0
+  const base = Math.max(fromBody, 6000)
+  const backoff = base * Math.pow(1.6, attempt)
+  return Math.min(45000, Math.round(backoff))
 }
 
 export function isLikelyGoogleAiStudioKey(key: string): boolean {

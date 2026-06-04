@@ -33,7 +33,7 @@ function AnalysisContent() {
           {
             icon: GitBranch,
             label: 'Hybrid LLM stack',
-            detail: 'Groq long-context · Gemini critical path',
+            detail: 'Gemini long JSON · Groq fallback · insights on Gemini',
           },
           {
             icon: Shield,

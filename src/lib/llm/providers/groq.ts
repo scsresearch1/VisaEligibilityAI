@@ -18,10 +18,10 @@ function groqMaxCompletionTokens(aggressive: boolean, size: GroqPromptSize): num
   if (size === 'full-analysis') {
     return aggressive
       ? (llm.groqMaxCompletionTokensAggressive ?? 1536)
-      : (llm.groqMaxCompletionTokensLargeJson ?? 1800)
+      : (llm.groqMaxCompletionTokensLargeJson ?? 1600)
   }
   if (size === 'roadmap-only') {
-    return aggressive ? 1024 : (llm.groqMaxCompletionTokensRoadmap ?? 1400)
+    return aggressive ? 1024 : (llm.groqMaxCompletionTokensRoadmap ?? 1200)
   }
   return aggressive
     ? (llm.groqMaxCompletionTokensAggressive ?? 1024)
@@ -81,9 +81,16 @@ async function callGroqOnce(
   }
   const text = data.choices?.[0]?.message?.content
   if (!text) throw new Error('Empty response from Groq')
+
   if (data.choices?.[0]?.finish_reason === 'length') {
-    console.warn('[groq] Response hit max_tokens — JSON may be incomplete.')
+    if (!aggressive) {
+      return callGroqOnce(systemInstruction, userText, true, size)
+    }
+    throw new Error(
+      'Groq response truncated (max_tokens) — JSON incomplete. Use Gemini or shorten profile text.',
+    )
   }
+
   return text
 }
 
@@ -93,25 +100,33 @@ async function callGroqWithRetries(
   size: GroqPromptSize,
 ): Promise<string> {
   let lastError: unknown
-  for (let attempt = 0; attempt < 4; attempt++) {
+  const maxAttempts = 5
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       return await callGroqOnce(systemInstruction, userText, false, size)
     } catch (error) {
       lastError = error
       const message = error instanceof Error ? error.message : String(error)
 
-      if (isGroqRequestTooLargeError(message)) {
-        return callGroqOnce(systemInstruction, userText, true, size)
+      if (isGroqRequestTooLargeError(message) && attempt < maxAttempts - 1) {
+        try {
+          return await callGroqOnce(systemInstruction, userText, true, size)
+        } catch (inner) {
+          lastError = inner
+        }
+        continue
       }
 
-      if (isGroqRateLimitError(message) && attempt < 3) {
-        await new Promise((r) => setTimeout(r, parseGroqRetryDelayMs(message)))
+      if (isGroqRateLimitError(message) && attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, parseGroqRetryDelayMs(message, attempt)))
         continue
       }
 
       throw error
     }
   }
+
   throw lastError instanceof Error ? lastError : new Error(String(lastError))
 }
 

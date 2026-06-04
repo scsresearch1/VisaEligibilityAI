@@ -84,14 +84,18 @@ export async function generateProfileInsights(
     provider: 'gemini' | 'groq',
     model: string,
     note?: string,
+    options?: { compactRetry?: boolean },
   ): GenerateInsightsResult => {
     const { rows: guaranteed, source } = ensureProfileInsightRows(state, rows)
-    const notes = [
-      note,
-      source !== 'llm'
-        ? `Strategy rows synthesized from ${source} (LLM parse empty or partial).`
-        : undefined,
-    ].filter(Boolean)
+    const notes: string[] = []
+
+    if (note?.trim()) notes.push(note.trim())
+
+    if (source !== 'llm') {
+      notes.push('Strategy rows synthesized from analysis (LLM parse empty or partial).')
+    } else if (options?.compactRetry) {
+      notes.push('Retried insights with compact prompt after empty or sparse rows.')
+    }
 
     const meta = stampLlmMeta(
       {
@@ -149,6 +153,8 @@ export async function generateProfileInsights(
     model = primary.model
     if (primary.note) note = primary.note
 
+    let compactRetry = false
+
     if (llmRows.length < 3) {
       const compactUser = buildInsightsUserPrompt(buildCompactInsightsContext(state))
       const compactSystem = buildInsightsSystemPromptCompact(state.selectedCategories)
@@ -161,8 +167,8 @@ export async function generateProfileInsights(
         llmRows = retryRows
         provider = retry.provider
         model = retry.model
+        compactRetry = true
       }
-      note = [note, 'Retried insights with compact prompt after empty or sparse rows.'].filter(Boolean).join(' ')
     }
 
     if (llmRows.length < 3 && isGeminiReady() && provider !== 'gemini') {
@@ -172,11 +178,11 @@ export async function generateProfileInsights(
         llmRows = geminiRows
         provider = 'gemini'
         model = geminiRetry.model
-        note = [note, 'Gemini retry after sparse Groq insights.'].filter(Boolean).join(' ')
+        compactRetry = false
       }
     }
 
-    return finish(llmRows, provider, model, note)
+    return finish(llmRows, provider, model, note, { compactRetry })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     const fallbackProvider = synthesisProvider()
