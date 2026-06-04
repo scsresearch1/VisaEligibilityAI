@@ -1,6 +1,7 @@
 import { appConfig } from '../../config/app.config'
 import { callGemini, callGeminiWithPrompts } from './providers/gemini'
-import { callGroq, callGroqWithPrompts, type GroqPromptSize } from './providers/groq'
+import { callGroqSplitScientificAnalysis, type GroqSplitAnalysisInput } from './groq-split-analysis'
+import { callGroq, callGroqWithPrompts, GroqTruncatedError, type GroqPromptSize } from './providers/groq'
 import {
   geminiKeySetupHint,
   groqKeySetupHint,
@@ -11,14 +12,9 @@ import {
 } from './trim-prompt'
 import { isLlmOutputRequired, LlmOutputRequiredError } from './llm-output-policy'
 
-export type LlmPromptPair = { system: string; user: string }
+import type { LlmPromptPair, LlmTextResult } from './llm-types'
 
-export interface LlmTextResult {
-  text: string
-  provider: 'gemini' | 'groq'
-  model: string
-  note?: string
-}
+export type { LlmPromptPair, LlmTextResult } from './llm-types'
 
 export function isGeminiReady(): boolean {
   return isLikelyGoogleAiStudioKey(appConfig.llm.geminiApiKey)
@@ -140,9 +136,28 @@ async function withFallback(
  * Long workloads (full analysis, benchmark): Gemini first when available (avoids Groq 6k TPM);
  * Groq fallback for hybrid without Gemini or explicit groq-only with Gemini escape hatch.
  */
+async function tryGroqLongTask(
+  groqPrompts: LlmPromptPair,
+  splitInput?: GroqSplitAnalysisInput,
+): Promise<LlmTextResult> {
+  if (splitInput && !isGeminiReady()) {
+    return callGroqSplitScientificAnalysis(splitInput)
+  }
+  try {
+    return await tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis')
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (splitInput && (err instanceof GroqTruncatedError || isGroqTruncatedError(msg))) {
+      return callGroqSplitScientificAnalysis(splitInput)
+    }
+    throw err
+  }
+}
+
 export async function callLlmForLongTask(
   groqPrompts: LlmPromptPair,
   geminiPrompts: LlmPromptPair,
+  splitInput?: GroqSplitAnalysisInput,
 ): Promise<LlmTextResult> {
   const { provider } = appConfig.llm
 
@@ -154,16 +169,17 @@ export async function callLlmForLongTask(
     if (isGeminiReady()) {
       return withFallback(
         () => tryGeminiPrompts(geminiPrompts.system, geminiPrompts.user),
-        () => tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis'),
+        () => tryGroqLongTask(groqPrompts, splitInput),
         'Gemini',
         'Groq',
         () => isGroqReady(),
       )
     }
     if (isGroqReady()) {
+      const res = await tryGroqLongTask(groqPrompts, splitInput)
       return {
-        ...(await tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis')),
-        note: 'Gemini key missing; used Groq for long task.',
+        ...res,
+        note: res.note ?? 'Gemini key missing; used Groq (split calls when needed) for long task.',
       }
     }
     throw new LlmOutputRequiredError(
@@ -174,27 +190,27 @@ export async function callLlmForLongTask(
   if (provider === 'groq') {
     if (isGeminiReady()) {
       return withFallback(
-        () => tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis'),
+        () => tryGroqLongTask(groqPrompts, splitInput),
         () => tryGeminiPrompts(geminiPrompts.system, geminiPrompts.user),
         'Groq',
         'Gemini',
         () => true,
       )
     }
-    return tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis')
+    return tryGroqLongTask(groqPrompts, splitInput)
   }
 
   if (isGeminiReady()) {
     return withFallback(
       () => tryGeminiPrompts(geminiPrompts.system, geminiPrompts.user),
-      () => tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis'),
+      () => tryGroqLongTask(groqPrompts, splitInput),
       'Gemini',
       'Groq',
       () => isGroqReady(),
     )
   }
   if (isGroqReady()) {
-    return tryGroqPrompts(groqPrompts.system, groqPrompts.user, 'full-analysis')
+    return tryGroqLongTask(groqPrompts, splitInput)
   }
   throw new LlmOutputRequiredError('No valid LLM API keys configured.')
 }

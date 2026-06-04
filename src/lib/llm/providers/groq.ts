@@ -11,17 +11,35 @@ import {
 import { delayBetweenGroqCalls, enqueueGroqRequest } from './groq-queue'
 
 /** Groq request profile — balances 6000 token/request cap vs JSON size. */
-export type GroqPromptSize = 'default' | 'full-analysis' | 'roadmap-only'
+export type GroqPromptSize =
+  | 'default'
+  | 'full-analysis'
+  | 'roadmap-only'
+  | 'analysis-core'
+  | 'compact-analysis'
+
+export class GroqTruncatedError extends Error {
+  constructor(message = 'Groq response truncated (max_tokens)') {
+    super(message)
+    this.name = 'GroqTruncatedError'
+  }
+}
 
 function groqMaxCompletionTokens(aggressive: boolean, size: GroqPromptSize): number {
   const llm = appConfig.llm
+  if (size === 'compact-analysis') {
+    return 2800
+  }
+  if (size === 'analysis-core') {
+    return aggressive ? 1400 : 2000
+  }
   if (size === 'full-analysis') {
     return aggressive
       ? (llm.groqMaxCompletionTokensAggressive ?? 1536)
-      : (llm.groqMaxCompletionTokensLargeJson ?? 1600)
+      : Math.min(2200, llm.groqMaxCompletionTokensLargeJson ?? 2000)
   }
   if (size === 'roadmap-only') {
-    return aggressive ? 1024 : (llm.groqMaxCompletionTokensRoadmap ?? 1200)
+    return aggressive ? 1024 : (llm.groqMaxCompletionTokensRoadmap ?? 1400)
   }
   return aggressive
     ? (llm.groqMaxCompletionTokensAggressive ?? 1024)
@@ -29,6 +47,12 @@ function groqMaxCompletionTokens(aggressive: boolean, size: GroqPromptSize): num
 }
 
 function trimOptionsForSize(size: GroqPromptSize, aggressive: boolean): TrimGroqOptions {
+  if (size === 'compact-analysis') {
+    return { aggressive: true, preferMaxCompletion: true }
+  }
+  if (size === 'analysis-core') {
+    return { aggressive, preferCoreBudget: true }
+  }
   if (size === 'full-analysis') {
     return { aggressive, preferLargeJsonBudget: true }
   }
@@ -83,11 +107,14 @@ async function callGroqOnce(
   if (!text) throw new Error('Empty response from Groq')
 
   if (data.choices?.[0]?.finish_reason === 'length') {
-    if (!aggressive) {
+    if (size === 'full-analysis' && !aggressive) {
       return callGroqOnce(systemInstruction, userText, true, size)
     }
-    throw new Error(
-      'Groq response truncated (max_tokens) — JSON incomplete. Use Gemini or shorten profile text.',
+    if (size === 'full-analysis' && aggressive) {
+      return callGroqOnce(systemInstruction, userText, true, 'compact-analysis')
+    }
+    throw new GroqTruncatedError(
+      'Groq response truncated (max_tokens) — JSON incomplete.',
     )
   }
 
@@ -120,6 +147,13 @@ async function callGroqWithRetries(
 
       if (isGroqRateLimitError(message) && attempt < maxAttempts - 1) {
         await new Promise((r) => setTimeout(r, parseGroqRetryDelayMs(message, attempt)))
+        continue
+      }
+
+      if (
+        (error instanceof GroqTruncatedError || /truncated|max_tokens/i.test(message)) &&
+        attempt < maxAttempts - 1
+      ) {
         continue
       }
 

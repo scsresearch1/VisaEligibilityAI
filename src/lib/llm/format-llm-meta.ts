@@ -9,6 +9,8 @@ function normalizeInternalNote(note: string): string {
   return note
     .replace(/Gemini key missing\/invalid; used Groq for insights\.?/i, '')
     .replace(/Gemini key missing; used Groq for long task\.?/i, '')
+    .replace(/Gemini key missing; used Groq \(split calls when needed\) for long task\.?/i, '')
+    .replace(/Groq used split calls \(core assessment \+ roadmap\) to complete analysis within token limits\.?/i, '')
     .replace(/Gemini key missing\/invalid; used Groq for critical task\.?/i, '')
     .replace(/Gemini retry after sparse Groq insights\.?/i, '')
     .replace(/Groq failed.*used Gemini\.?/i, '')
@@ -64,11 +66,18 @@ export function formatLlmMetaForDisplay(
     }
   }
 
-  if (/truncated|max_tokens|json incomplete/i.test(lower)) {
+  if (/truncated|max_tokens|json incomplete|split calls/i.test(lower)) {
+    if (/split calls/i.test(lower)) {
+      return {
+        level: 'info',
+        message:
+          'Analysis completed using two smaller Groq requests to fit token limits. Add VITE_GEMINI_API_KEY for a single-call experience.',
+      }
+    }
     return {
       level: 'warn',
       message:
-        'The model response was cut off. Add VITE_GEMINI_API_KEY or shorten uploaded documents, then run analysis again.',
+        'The model response was cut off. Add VITE_GEMINI_API_KEY (Google AI Studio) or shorten uploaded documents, then run analysis again.',
     }
   }
 

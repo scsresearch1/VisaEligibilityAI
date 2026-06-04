@@ -81,6 +81,63 @@ export function buildScientificAnalysisSystemPrompt(categories: VisaCategory[]):
   ].join('\n')
 }
 
+/** Core assessment only — used for Groq split call 1 (no roadmapActions). */
+export const SCIENTIFIC_ANALYSIS_CORE_SCHEMA = `{
+  "criterionEvaluations": [{
+    "criterionId": string,
+    "evidenceScore": number,
+    "strengthLabel": "missing"|"unsupported"|"weak"|"moderate"|"strong",
+    "profileEvidence": string[],
+    "regulatoryBasis": string,
+    "gapSummary": string,
+    "buildRecommendation": string
+  }],
+  "parsedAchievements": [{ "type": string, "summary": string, "domain": string, "confidence": number }],
+  "gaps": [{
+    "title": string,
+    "description": string,
+    "severity": "critical"|"high"|"medium"|"low",
+    "criterionId": string,
+    "category": "EB1A"|"EB1B"|"EB1C",
+    "impactScore": number
+  }],
+  "recommendations": [{
+    "documentType": string,
+    "purpose": string,
+    "priority": "critical"|"high"|"medium",
+    "estimatedImpactPercent": number,
+    "category": "EB1A"|"EB1B"|"EB1C",
+    "criterionId": string
+  }],
+  "riskFlags": [{
+    "claim": string,
+    "riskType": "exaggerated"|"unsupported"|"weak"|"legally_sensitive",
+    "severity": "high"|"medium"|"low",
+    "recommendation": string
+  }]
+}`
+
+export function buildScientificAnalysisSystemPromptGroqCore(categories: VisaCategory[]): string {
+  return [
+    'Scientific EB-1 assessment — output ONLY valid JSON. Do NOT include roadmapActions.',
+    `Pathways: ${categories.join(', ')}.`,
+    'One criterionEvaluations row per criterion id in the user checklist.',
+    'profileEvidence must quote the fact inventory. evidenceScore within ±15 of BASE when cited.',
+    'Schema:',
+    SCIENTIFIC_ANALYSIS_CORE_SCHEMA,
+  ].join('\n')
+}
+
+export function buildScientificAnalysisSystemPromptGroqRoadmap(categories: VisaCategory[]): string {
+  return [
+    'Output ONLY valid JSON with roadmapActions array (6-10 items).',
+    `Pathways: ${categories.join(', ')}.`,
+    'Each action needs deliverableSpec: publications→suggestedTitles; patents/product→outline+domain.',
+    'Use gap summary from user message; match candidate field and employers.',
+    'Schema: { "roadmapActions": [{ "priority", "title", "domain", "evidenceArea", "deliverableOutline", "deliverableSpec", "description", "profileAnchor", "timeframe", "expectedReadinessGain", "category", "visaCategory" }] }',
+  ].join('\n')
+}
+
 /** Shorter system prompt for Groq TPM limits (fallback path). */
 export function buildScientificAnalysisSystemPromptCompact(categories: VisaCategory[]): string {
   return [

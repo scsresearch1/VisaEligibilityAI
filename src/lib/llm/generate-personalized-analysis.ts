@@ -210,7 +210,25 @@ export async function generatePersonalizedAnalysis(
 
   try {
     const groqPrompts = buildPrompts(true)
-    const res = await callLlmForLongTask(groqPrompts, buildPrompts(false))
+    const snippetLimit = getProfileSnippetLimit(true)
+    const splitInput = {
+      categories: state.selectedCategories,
+      profile,
+      structured: state.structuredProfile,
+      profileContext: buildProfileContextBlock(
+        state.uploads.map((u) => ({
+          name: u.name,
+          category: u.category,
+          textSnippet: u.textSnippet?.slice(0, snippetLimit),
+        })),
+        state.selectedCategories,
+        rubricDigest,
+        state.structuredProfile,
+        { maxSnippetChars: snippetLimit, maxTotalChars: snippetLimit + 1200 },
+      ),
+      rubricDigest,
+    }
+    const res = await callLlmForLongTask(groqPrompts, buildPrompts(false), splitInput)
     return applyLlmResponse(
       res.text,
       res.provider,

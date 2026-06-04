@@ -13,13 +13,31 @@ export function buildScientificAnalysisUserPrompt(options: {
   profile: ExtractedProfileSignals
   structured?: StructuredResumeProfile | null
   forGroq: boolean
+  /** Groq split pass: core criteria only, or roadmap-only follow-up */
+  phase?: 'full' | 'core' | 'roadmap'
+  gapSummaryForRoadmap?: string
 }): string {
   const inventory = buildProfileFactInventory(options.profile, options.structured)
   const factBlock = formatFactInventoryForPrompt(inventory)
   const criterionChecklist = buildCompactCriterionDigest(options.categories)
 
+  const phase = options.phase ?? 'full'
+
+  if (phase === 'roadmap') {
+    return [
+      'TASK: Build roadmapActions only from prior assessment gaps.',
+      options.gapSummaryForRoadmap ?? '',
+      '',
+      factBlock.slice(0, 2000),
+      '',
+      'REQUIREMENTS: 6–10 roadmapActions with deliverableSpec matched to candidate field.',
+    ].join('\n')
+  }
+
   const sections = [
-    'TASK: Full scientific EB-1 assessment. Output ONLY valid JSON matching the system schema.',
+    phase === 'core'
+      ? 'TASK: Core EB-1 assessment (no roadmapActions). Output ONLY valid JSON.'
+      : 'TASK: Full scientific EB-1 assessment. Output ONLY valid JSON matching the system schema.',
     '',
     factBlock,
     '',
@@ -28,12 +46,16 @@ export function buildScientificAnalysisUserPrompt(options: {
     'REQUIREMENTS:',
     '- criterionEvaluations: one row per criterion id above (no omissions).',
     '- profileEvidence: must anchor to VERIFIED FACT INVENTORY (no invented credentials).',
-    '- roadmapActions: 6–12 build actions; deliverableSpec titles/outlines must match candidate field and employers listed.',
+    ...(phase === 'full'
+      ? [
+          '- roadmapActions: 6–12 build actions; deliverableSpec titles/outlines must match candidate field and employers listed.',
+        ]
+      : []),
     '- gaps: tie each gap to criterionId where evidence is weak/missing; impactScore ≈ 100 − evidenceScore.',
     '- parsedAchievements: only achievements explicitly supported by inventory facts.',
     '- riskFlags: flag marketing language, unsupported salary/impact claims, or missing exhibits.',
     '',
-    options.profileContext,
+    phase === 'core' ? factBlock : options.profileContext,
   ]
 
   if (!options.forGroq) {

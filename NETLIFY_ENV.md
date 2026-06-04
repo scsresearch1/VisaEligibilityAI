@@ -66,6 +66,8 @@ Vite only exposes variables prefixed with `VITE_`. They are embedded at **build 
 
 `llama-3.1-8b-instant` on the free/on_demand tier allows about **6000 tokens per request** (prompt + completion). If you see **413 Request too large**, ensure `VITE_GROQ_MAX_COMPLETION_TOKENS` is **1200** (not 4096) and use the char limits above, or add a valid **`VITE_GEMINI_API_KEY`** (`AIza…`) for automatic Gemini fallback.
 
+If you see **Groq response truncated (max_tokens) — JSON incomplete**, the app will automatically run **two smaller Groq calls** (core assessment + roadmap) when Gemini is not configured. For a single-call experience and fewer rate-limit hits, add **`VITE_GEMINI_API_KEY`** or shorten uploaded résumé text (`VITE_GROQ_MAX_PROFILE_CHARS`).
+
 ## Security
 
 - Mark `VITE_GEMINI_API_KEY`, `VITE_GROQ_API_KEY`, and `VITE_AUTH_PASSWORD` as **secret** in Netlify if available.

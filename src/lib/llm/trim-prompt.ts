@@ -27,18 +27,28 @@ export type TrimGroqOptions = {
   preferLargeJsonBudget?: boolean
   /** Small roadmap-only follow-up call */
   preferRoadmapBudget?: boolean
+  /** Shrink input to maximize completion tokens (last-resort single call) */
+  preferMaxCompletion?: boolean
+  /** Groq split call 1 — core criteria only */
+  preferCoreBudget?: boolean
 }
 
 function completionBudgetForTrim(options?: TrimGroqOptions): number {
   const llm = appConfig.llm
   const aggressive = options?.aggressive ?? false
+  if (options?.preferMaxCompletion) {
+    return 2800
+  }
+  if (options?.preferCoreBudget) {
+    return aggressive ? 1400 : 2000
+  }
   if (options?.preferLargeJsonBudget) {
     return aggressive
       ? (llm.groqMaxCompletionTokensAggressive ?? 1536)
-      : (llm.groqMaxCompletionTokensLargeJson ?? 1800)
+      : Math.min(2200, llm.groqMaxCompletionTokensLargeJson ?? 2000)
   }
   if (options?.preferRoadmapBudget) {
-    return aggressive ? 1200 : (llm.groqMaxCompletionTokensRoadmap ?? 1600)
+    return aggressive ? 1200 : (llm.groqMaxCompletionTokensRoadmap ?? 1400)
   }
   return aggressive
     ? (llm.groqMaxCompletionTokensAggressive ?? 1024)
@@ -63,14 +73,23 @@ export function trimGroqPrompts(
   )
 
   const charBudget = Math.floor(inputTokenBudget * 3.5)
-  const maxSystem = Math.min(
-    aggressive ? 1800 : (llm.groqMaxSystemChars ?? 2400),
-    Math.floor(charBudget * 0.38),
-  )
-  const maxUser = Math.min(
-    aggressive ? 2200 : (llm.groqMaxUserChars ?? 2800),
-    charBudget - maxSystem,
-  )
+  const systemCap = options?.preferMaxCompletion
+    ? 1400
+    : options?.preferCoreBudget
+      ? 1600
+      : aggressive
+        ? 1800
+        : (llm.groqMaxSystemChars ?? 2400)
+  const userCap = options?.preferMaxCompletion
+    ? 4200
+    : options?.preferCoreBudget
+      ? 3500
+      : aggressive
+        ? 2200
+        : (llm.groqMaxUserChars ?? 2800)
+
+  const maxSystem = Math.min(systemCap, Math.floor(charBudget * 0.38))
+  const maxUser = Math.min(userCap, charBudget - maxSystem)
 
   let trimmedSystem = trimForLlm(system, maxSystem)
   let trimmedUser = trimForLlm(user, maxUser)
