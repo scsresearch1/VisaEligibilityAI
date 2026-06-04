@@ -17,6 +17,7 @@ import type {
   VisaCategory,
 } from '../types/assessment'
 import type { BenchmarkRoadmapRow } from '../types/benchmark-report'
+import { claimRisksToRiskFlags } from './reference-profile/claim-risk-scanner'
 import { scoreAllCriteria } from './scientific-assessment/score-criterion'
 
 type Strength = EvidenceItem['strength']
@@ -170,49 +171,7 @@ export function buildRecommendationsFromRoadmap(
 }
 
 export function buildRiskFlagsFromProfile(profile: ExtractedProfileSignals): RiskFlag[] {
-  const flags: RiskFlag[] = []
-  const anchor =
-    profile.keyClaims.length > 0
-      ? profile.keyClaims.slice(0, 3).join('; ')
-      : 'built publications, patents, and third-party verification tied to profile claims'
-
-  profile.riskyPhrases.forEach((r, i) => {
-    let riskType: RiskFlag['riskType'] = 'exaggerated'
-    if (/\$|million|billion/i.test(r.phrase)) riskType = 'weak'
-    if (/shipped|global|sole/i.test(r.phrase)) riskType = 'unsupported'
-
-    flags.push({
-      id: `risk-${i}`,
-      claim: r.context.slice(0, 200),
-      riskType,
-      severity: riskType === 'exaggerated' ? 'high' : 'medium',
-      recommendation: `Rebuild or support this claim with newly produced evidence (not resume text alone). Anchor: ${anchor}.`,
-    })
-  })
-
-  if (flags.length === 0 && profile.keyClaims.length > 0) {
-    flags.push({
-      id: 'risk-generic',
-      claim: profile.keyClaims[0].slice(0, 180),
-      riskType: 'weak',
-      severity: 'medium',
-      recommendation:
-        'Consulting must build independent letters, metrics, or publications that substantiate this claim.',
-    })
-  }
-
-  if (flags.length === 0) {
-    flags.push({
-      id: 'risk-upload',
-      claim: 'Limited extractable profile text',
-      riskType: 'unsupported',
-      severity: 'medium',
-      recommendation:
-        'Upload a PDF or Word resume for profiling, then execute the build roadmap — collection of old files will not close gaps.',
-    })
-  }
-
-  return flags.slice(0, 6)
+  return claimRisksToRiskFlags(profile).slice(0, 8)
 }
 
 /** @deprecated Use buildPrioritizedActionPlan — kept for imports that only have a table */

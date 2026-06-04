@@ -12,6 +12,12 @@ import {
   ensureRoadmapRowOutlines,
   type PersonalizedBenchmarkPayload,
 } from './personalized-heuristic'
+import { buildPathwayRecommendation } from '../reference-profile/pathway-recommendation'
+import {
+  archetypeLabel,
+  detectProfileArchetype,
+} from '../reference-profile/profile-archetype'
+import { buildPositioningThemeTable } from '../reference-profile/positioning-themes'
 
 function isCounselReviewArea(area: string): boolean {
   return /counsel review|attorney-review/i.test(area)
@@ -69,6 +75,10 @@ export function generateEb1aBenchmarkReport(
   const sourceNote =
     'Quantified from this candidate\'s profile and selected pathway criteria. Professional review recommended before filing.'
 
+  const archetype = detectProfileArchetype(profile)
+  const pathwayRec = buildPathwayRecommendation(profile, state.selectedCategories)
+  const themeRows = buildPositioningThemeTable(profile)
+
   return {
     id: `benchmark-${Date.now()}`,
     generatedAt: new Date().toISOString(),
@@ -104,6 +114,21 @@ export function generateEb1aBenchmarkReport(
         payload.positioningThemes.length > 0
           ? payload.positioningThemes
           : profile.domains.slice(0, 4),
+      positioningThemeRows: themeRows,
+      pathwayRecommendation: {
+        primary: pathwayRec.primary,
+        secondary: pathwayRec.secondary,
+        notRecommended: pathwayRec.notRecommended,
+        filingStatus: pathwayRec.filingStatus,
+        buildFocus: pathwayRec.buildFocus,
+        rows: pathwayRec.rows.map((r) => ({
+          pathway: r.pathway,
+          readinessScore: r.readinessScore,
+          status: r.status,
+          finding: r.finding,
+        })),
+      },
+      profileArchetype: archetypeLabel(archetype),
     },
     sourceNote,
     personalizationSource: payload.personalizationSource,

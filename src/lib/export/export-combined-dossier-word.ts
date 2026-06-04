@@ -130,16 +130,58 @@ function buildWordHtml(data: AttorneyDossierData, state: AssessmentState): strin
       structuredProfileTableRows(state.structuredProfile),
     ),
   )
-  if (report.conclusion.positioningThemes.length) {
+  if (report.conclusion.positioningThemeRows?.length) {
+    sections.push(h1('Strategic positioning themes'))
+    sections.push(
+      table(
+        ['Theme', 'Interpretation'],
+        report.conclusion.positioningThemeRows.map((t) => [t.theme, t.interpretation]),
+      ),
+    )
+  } else if (report.conclusion.positioningThemes.length) {
     sections.push(h1('Strategic positioning themes'))
     sections.push(ul(report.conclusion.positioningThemes))
+  }
+  if (report.conclusion.profileArchetype) {
+    sections.push(p(`Profile archetype: ${report.conclusion.profileArchetype}`))
+  }
+  if (report.conclusion.pathwayRecommendation) {
+    const pr = report.conclusion.pathwayRecommendation
+    sections.push(h1('Pathway recommendation snapshot'))
+    sections.push(
+      highlight('Primary / secondary pathways', [
+        `Primary: ${pr.primary}${pr.secondary ? ` · Secondary: ${pr.secondary}` : ''}`,
+        `Filing status: ${pr.filingStatus}`,
+        `Build focus: ${pr.buildFocus}`,
+      ]),
+    )
+    sections.push(
+      table(
+        ['Pathway', 'Readiness', 'Status', 'Finding'],
+        pr.rows.map((r) => [r.pathway, `${r.readinessScore}/100`, r.status, r.finding]),
+      ),
+    )
   }
 
   sections.push(partBanner('Part I', 'Readiness Benchmark Report'))
   for (const lead of enrichment.readinessLegalPreamble) sections.push(p(lead, 'lead'))
   sections.push(h1('I.1 Corrected Evaluation Logic'))
   sections.push(enrichment.evaluationLogicLegal.map((t) => p(t)).join(''))
-  sections.push(h1('I.2 Current EB-1 Baseline Assessment'))
+  if (report.conclusion.pathwayRecommendation?.rows.length) {
+    sections.push(h1('I.1b Per-pathway baseline assessment'))
+    sections.push(
+      table(
+        ['Pathway', 'Readiness', 'Status', 'Finding'],
+        report.conclusion.pathwayRecommendation.rows.map((r) => [
+          r.pathway,
+          `${r.readinessScore}/100`,
+          r.status,
+          r.finding,
+        ]),
+      ),
+    )
+  }
+  sections.push(h1('I.2 Aggregate readiness & consulting baseline'))
   sections.push(
     table(
       ['Assessment metric', 'Finding (consulting rubric)'],

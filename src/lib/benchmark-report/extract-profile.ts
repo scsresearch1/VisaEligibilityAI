@@ -17,6 +17,7 @@ export {
   isWeakProfileAnchor,
 }
 import { deepExtractResume, type StructuredResumeProfile } from '../resume-deep-extract'
+import { scanClaimRisks } from '../reference-profile/claim-risk-scanner'
 
 export type RiskyPhraseHit = { phrase: string; context: string }
 
@@ -32,30 +33,38 @@ export type ExtractedProfileSignals = StructuredResumeProfile & {
   hasLeadership: boolean
 }
 
-const RISKY_PATTERNS: RegExp[] = [
-  /\b(world[- ]class|best[- ]in[- ]class|industry[- ]leading|unparalleled|revolutionary)\b/gi,
-  /\b(sole|only person|first ever|guaranteed)\b/gi,
-  /\b(\$[\d,.]+\s*(million|billion|m|b))\b/gi,
-  /\b(shipped to (millions|production)|global scale|enterprise[- ]wide)\b/gi,
-]
-
 function extractRiskyPhrases(text: string): RiskyPhraseHit[] {
-  const hits: RiskyPhraseHit[] = []
-  const lines = text.split('\n')
-  for (const line of lines) {
-    for (const re of RISKY_PATTERNS) {
-      re.lastIndex = 0
-      let match: RegExpExecArray | null
-      while ((match = re.exec(line)) !== null) {
-        hits.push({
-          phrase: match[0],
-          context: line.trim().slice(0, 200),
-        })
-        if (hits.length >= 8) return hits
-      }
-    }
+  const stub = {
+    fullText: text,
+    keyClaims: [],
+    publications: [],
+    patents: [],
+    workExperience: [],
+    education: [],
+    domains: [],
+    keyMetrics: [],
+    awards: [],
+    certifications: [],
+    projects: [],
+    skills: [],
+    riskyPhrases: [],
+    hasPublication: false,
+    hasPatent: false,
+    hasProductClaim: false,
+    hasAward: false,
+    hasLeadership: false,
+    candidateName: '',
+    nameMeta: { value: '', source: 'default' as const, confidence: 'low' as const },
+    contact: {},
+    parsedSections: [],
+    sectionBlocks: [],
+    extractionQuality: 'minimal' as const,
+    sectionsDetected: 0,
   }
-  return hits
+  return scanClaimRisks(stub as ExtractedProfileSignals).map((r) => ({
+    phrase: r.claim.slice(0, 80),
+    context: r.claim,
+  }))
 }
 
 function buildKeyClaims(structured: StructuredResumeProfile): string[] {

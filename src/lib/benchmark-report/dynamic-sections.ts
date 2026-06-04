@@ -1,6 +1,11 @@
 import type { AssessmentState } from '../../types/assessment'
 import type { BenchmarkReport, BenchmarkRoadmapRow, BenchmarkSection } from '../../types/benchmark-report'
 import type { ExtractedProfileSignals } from './extract-profile'
+import {
+  publicationTitlesForProfile,
+  patentTitlesForProfile,
+  productSpecsForProfile,
+} from '../reference-profile/deliverable-titles'
 
 function qtyForArea(table: BenchmarkRoadmapRow[], areaSubstring: string): number {
   return table.find((r) => r.area.includes(areaSubstring))?.quantityToBuild ?? 0
@@ -25,6 +30,15 @@ function uniqueLines(lines: string[], max: number): string[] {
 
 function buildPaperItems(profile: ExtractedProfileSignals, count: number) {
   const field = profile.domains.slice(0, 2).join(' / ') || 'documented technical domain'
+  const domainTitles = publicationTitlesForProfile(profile, count)
+  if (domainTitles.length >= count) {
+    return domainTitles.slice(0, count).map((title, i) => ({
+      title,
+      purpose: `Strengthen authorship criterion with verifiable publication ${i + 1} tied to ${field}.`,
+      eb1aContribution: 'Original authorship and scholarly contribution.',
+    }))
+  }
+
   const items: BenchmarkSection['items'] = []
 
   if (profile.publications.length > 0) {
@@ -64,6 +78,15 @@ function buildPaperItems(profile: ExtractedProfileSignals, count: number) {
 }
 
 function buildPatentItems(profile: ExtractedProfileSignals, count: number) {
+  const patentTitles = patentTitlesForProfile(profile, count)
+  if (patentTitles.length >= count) {
+    return patentTitles.slice(0, count).map((title) => ({
+      title,
+      technicalBasis: 'Enablement draft from profile-documented innovation.',
+      eb1aContribution: 'Patent / original contribution evidence.',
+    }))
+  }
+
   const items: BenchmarkSection['items'] = []
 
   profile.patents.slice(0, count).forEach((p) => {
@@ -101,6 +124,16 @@ function buildPatentItems(profile: ExtractedProfileSignals, count: number) {
 
 function buildProductItems(profile: ExtractedProfileSignals, count: number) {
   const field = profile.domains[0] ?? 'technical practice'
+  const specs = productSpecsForProfile(profile, count)
+  if (specs.length >= count) {
+    return specs.slice(0, count).map((p) => ({
+      title: p.name,
+      purpose: p.technicalImpact,
+      eb1aContribution: 'Product / original contribution criterion.',
+      coreModules: [p.financialImpact, p.socialImpact],
+    }))
+  }
+
   const items: BenchmarkSection['items'] = []
 
   for (const job of profile.workExperience) {

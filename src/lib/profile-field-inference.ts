@@ -56,6 +56,32 @@ const FIELD_RULES: { patterns: RegExp[]; label: string; weight: number }[] = [
     weight: 6,
     patterns: [/\bmachine learning\b/i, /\bdeep learning\b/i, /\b(llm|nlp)\b/i],
   },
+  {
+    label: 'Pharmaceutical Sciences & Vaccine Delivery',
+    weight: 8,
+    patterns: [
+      /\bpharma(ceutical)?\b/i,
+      /\bvaccine\b/i,
+      /\bdrug delivery\b/i,
+      /\bchitosan\b/i,
+      /\bdry powder inhaler\b/i,
+      /\bformulation\b/i,
+      /\bpulmonary\b/i,
+    ],
+  },
+  {
+    label: 'Enterprise Integration & Cloud Architecture',
+    weight: 8,
+    patterns: [
+      /\bmulesoft\b/i,
+      /\btibco\b/i,
+      /\bapi[- ]led\b/i,
+      /\bmiddleware\b/i,
+      /\bsap\s+s\/4hana\b/i,
+      /\benterprise integration\b/i,
+      /\bcloudhub\b/i,
+    ],
+  },
 ]
 
 /** Score-based primary field(s) — avoids false positives from words like "medical" in a university name. */

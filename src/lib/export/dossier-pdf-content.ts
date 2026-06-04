@@ -15,6 +15,13 @@ import type {
   BenchmarkRoadmapRow,
 } from '../../types/benchmark-report'
 import type { StructuredResumeProfile } from '../resume-deep-extract'
+import { buildResumeSectionTaxonomy } from '../reference-profile/resume-section-taxonomy'
+import {
+  buildDomainDeliverables,
+  productSpecsForProfile,
+  publicationTitlesForProfile,
+  patentTitlesForProfile,
+} from '../reference-profile/deliverable-titles'
 
 export interface EnrichedConsultingArea {
   area: string
@@ -114,16 +121,19 @@ const AREA_INSIGHT_HINTS: Record<string, string[]> = {
 export function buildParsingPhaseStages(
   state: AssessmentState,
   structuredSummary: string,
+  profile?: ExtractedProfileSignals,
 ): ParsingStageRow[] {
   const sp = state.structuredProfile
   const uploads = state.uploads
   const achievements = state.parsedAchievements
+  const p = profile ?? extractProfileSignals(state.uploads)
+  const taxonomy = buildResumeSectionTaxonomy(p, state)
 
-  const sectionCount = sp?.sectionsDetected ?? sp?.parsedSections?.length ?? 0
-  const workCount = sp?.workExperience?.length ?? 0
-  const eduCount = sp?.education?.length ?? 0
-  const pubCount = sp?.publications?.length ?? 0
-  const patentCount = sp?.patents?.length ?? 0
+  const sectionCount = taxonomy.sectionsDetected || sp?.parsedSections?.length || 0
+  const workCount = taxonomy.workExperienceEntries
+  const eduCount = taxonomy.educationEntries
+  const pubCount = taxonomy.publicationEntries
+  const patentCount = taxonomy.patentEntries
 
   return [
     {
@@ -146,24 +156,31 @@ export function buildParsingPhaseStages(
         { label: 'Work entries', value: String(workCount) },
         { label: 'Education entries', value: String(eduCount) },
         { label: 'Candidate identity', value: sp?.candidateName ?? '—' },
+        { label: 'Product / project entries', value: String(taxonomy.productOrProjectEntries) },
       ],
-      notes: (sp?.parsedSections ?? []).slice(0, 5).map((s) => s.heading),
+      notes: taxonomy.sectionHeadings.length
+        ? taxonomy.sectionHeadings
+        : (sp?.parsedSections ?? []).slice(0, 5).map((s) => s.heading),
     },
     {
       stage: 'Stage 3 — Signal extraction & domain inference',
       engine: 'Profile signal graph',
       status: achievements.length > 0 || workCount > 0 ? 'complete' : 'partial',
       metrics: [
-        { label: 'Parsed achievements', value: String(achievements.length) },
+        { label: 'Parsed achievements', value: String(taxonomy.parsedAchievements || achievements.length) },
         { label: 'Publications indexed', value: String(pubCount) },
         { label: 'Patents indexed', value: String(patentCount) },
-        { label: 'Skills / projects', value: `${sp?.skills?.length ?? 0} / ${sp?.projects?.length ?? 0}` },
+        { label: 'Inferred domain', value: taxonomy.inferredDomain.slice(0, 48) },
+        { label: 'Leadership / managerial', value: `${taxonomy.leadershipSignals} / ${taxonomy.managerialSignals}` },
       ],
-      notes: achievements.slice(0, 4).map((a) => {
+      notes: [
+        ...taxonomy.employersAndClients.slice(0, 3).map((e) => `Entity: ${e}`),
+        ...achievements.slice(0, 2).map((a) => {
         const summary = a.summary?.trim() ?? ''
         const excerpt = summary.length > 60 ? `${summary.slice(0, 60)}…` : summary || '(no summary)'
         return `${a.type}: ${excerpt}`
-      }),
+        }),
+      ].slice(0, 5),
     },
     {
       stage: 'Stage 4 — Regulatory rule engine pre-score',
@@ -309,10 +326,8 @@ export function buildPositioningParagraph(
 
 function enrichPaperItems(profile: ExtractedProfileSignals, count: number): EnrichedDeliverableItem[] {
   if (count <= 0) return []
-  const spec = buildDeliverableSpec('br-pub', profile, count)
-  const field = spec?.domain ?? primaryFieldForDeliverables(profile.domains, profile.fullText)
-  const titles =
-    spec?.suggestedTitles?.length ? spec.suggestedTitles : [`Peer-reviewed study advancing ${field}`]
+  const field = primaryFieldForDeliverables(profile.domains, profile.fullText)
+  const titles = publicationTitlesForProfile(profile, count)
 
   return titles.slice(0, count).map((title, i) => ({
     title,
@@ -326,13 +341,10 @@ function enrichPaperItems(profile: ExtractedProfileSignals, count: number): Enri
 function enrichPatentItems(profile: ExtractedProfileSignals, count: number): EnrichedDeliverableItem[] {
   if (count <= 0) return []
   const field = primaryFieldForDeliverables(profile.domains, profile.fullText)
-  const topic = profile.workExperience[0]?.highlights[0] ?? profile.keyClaims[0] ?? field
-
-  const titles = [
-    `System and Method for ${topic.slice(0, 55)} in ${field}`,
-    `Apparatus for Optimized ${field.split(' ')[0] ?? 'Technical'} Processing With Verifiable Performance Gains`,
-    `Computer-Implemented Framework for ${topic.slice(0, 45)} With Audit Trail and Validation Module`,
-  ]
+  const deliverables = buildDomainDeliverables(profile, 2, count, 2)
+  const titles = patentTitlesForProfile(profile, count).length
+    ? patentTitlesForProfile(profile, count)
+    : deliverables.patents
 
   return titles.slice(0, count).map((title, i) => ({
     title,
@@ -346,6 +358,26 @@ function enrichProductItems(profile: ExtractedProfileSignals, count: number): En
   if (count <= 0) return []
   const field = primaryFieldForDeliverables(profile.domains, profile.fullText)
   const job = profile.workExperience[0]
+  const domainProducts = productSpecsForProfile(profile, count)
+
+  if (domainProducts.length > 0) {
+    return domainProducts.slice(0, count).map((p, i) => ({
+      title: p.name,
+      purpose: 'Demonstrable original contribution with third-party evaluable artifact.',
+      keyFeatures: [
+        'Architecture documentation and validation harness',
+        'Audit-ready performance or reliability metrics',
+        'Third-party or expert review pathway',
+      ],
+      marketPosition: `Profile-aligned ${field} deliverable ${i + 1} for counsel review.`,
+      roiOutline: p.financialImpact,
+      financialImpact: p.financialImpact,
+      socialImpact: p.socialImpact,
+      technicalImpact: p.technicalImpact,
+      eb1aContribution: 'Supports product / original contribution criterion.',
+      justification: `Product ${i + 1} synthesized from ${job ? `${job.title} @ ${job.company}` : 'documented technical narrative'} in ${field}.`,
+    }))
+  }
 
   const items: EnrichedProductItem[] = [
     {
@@ -580,7 +612,7 @@ export function buildDossierPdfEnrichment(
   }))
 
   const enrichment: DossierPdfEnrichment = {
-    parsingStages: buildParsingPhaseStages(state, data.structuredProfileSummary),
+    parsingStages: buildParsingPhaseStages(state, data.structuredProfileSummary, profile),
     readinessLegalPreamble: buildReadinessLegalPreamble(report, data.pathways),
     evaluationLogicLegal: report.evaluationLogic,
     roadmapJustifications,

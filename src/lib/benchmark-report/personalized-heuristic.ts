@@ -10,6 +10,19 @@ import type {
 } from '../../types/benchmark-report'
 import type { ExtractedProfileSignals } from './extract-profile'
 import { extractProfileSignals, formatProfileKeySignals } from './extract-profile'
+import {
+  calibrateProjectedReadiness,
+  calibrateReadinessScore,
+  detectProfileArchetype,
+  getArchetypeCalibration,
+  scaleBuildQuantitiesToTarget,
+} from '../reference-profile/profile-archetype'
+import { buildPathwayRecommendation } from '../reference-profile/pathway-recommendation'
+import {
+  computeInventoryRoadmapScores,
+  mergeInventoryWithCriterionScore,
+} from '../reference-profile/roadmap-inventory-scores'
+import { positioningThemesAsStrings } from '../reference-profile/positioning-themes'
 
 const STRENGTH_SCORE: Record<EvidenceStrength, number> = {
   strong: 88,
@@ -235,16 +248,16 @@ export function computeProfileAwareRoadmapTable(
   profile: ExtractedProfileSignals,
 ): BenchmarkRoadmapRow[] {
   const areas = EB1A_ROADMAP_AREAS
+  const inventoryScores = computeInventoryRoadmapScores(state, profile)
 
-  return areas.map((def) => {
-    let current = scoreForCriteria(state, def.criterionIds)
-    if (def.id === 'br-pub' && profile.hasPublication) current = Math.max(current, 32)
-    if (def.id === 'br-patent' && profile.hasPatent) current = Math.max(current, 28)
-    if (def.id === 'br-product' && profile.hasProductClaim) current = Math.max(current, 30)
-    if (def.id === 'br-articles') current = Math.min(current, profile.keyClaims.length > 2 ? 18 : 8)
-    if (def.id === 'br-judging') current = Math.min(current, 12)
+  const rows = areas.map((def) => {
+    const criterionScore = scoreForCriteria(state, def.criterionIds)
+    let current = mergeInventoryWithCriterionScore(
+      inventoryScores[def.id] ?? criterionScore,
+      criterionScore,
+    )
     if (def.id === 'br-attorney') {
-      current = Math.min(70, Math.max(35, Math.round(state.criterionResults.length * 3.5)))
+      current = inventoryScores['br-attorney'] ?? current
     }
 
     const target = def.targetScore
@@ -262,6 +275,18 @@ export function computeProfileAwareRoadmapTable(
       consultingResponsibility: responsibilityForArea(def, profile, Math.max(quantityToBuild, 1)),
     }
   })
+
+  const archetype = detectProfileArchetype(profile)
+  const scaledQty = scaleBuildQuantitiesToTarget(rows, archetype)
+  return rows.map((r, i) => ({
+    ...r,
+    quantityToBuild: scaledQty[i],
+    consultingResponsibility: responsibilityForArea(
+      areas.find((a) => a.id === r.id)!,
+      profile,
+      Math.max(scaledQty[i], 1),
+    ),
+  }))
 }
 
 export function buildHeuristicPersonalizedPayload(
@@ -272,22 +297,21 @@ export function buildHeuristicPersonalizedPayload(
   const roadmapTable = computeProfileAwareRoadmapTable(state, p)
   const totalAssets = roadmapTable.reduce((s, r) => s + r.quantityToBuild, 0)
 
+  const archetype = detectProfileArchetype(p)
+  const calibration = getArchetypeCalibration(archetype)
+  const pathway = buildPathwayRecommendation(p, state.selectedCategories)
+
   const criterionPct =
     state.criterionResults.length > 0
       ? state.criterionResults.filter((c) => c.status === 'satisfied' || c.status === 'partial')
           .length / state.criterionResults.length
       : 0.3
-  const readiness = Math.min(
-    72,
-    Math.max(
-      38,
-      Math.round(
-        roadmapTable.reduce((s, r) => s + r.currentScore, 0) / roadmapTable.length +
-          criterionPct * 8 +
-          p.keyClaims.length * 1.5,
-      ),
-    ),
+  const computedReadiness = Math.round(
+    roadmapTable.reduce((s, r) => s + r.currentScore, 0) / roadmapTable.length +
+      criterionPct * 8 +
+      p.keyClaims.length * 1.5,
   )
+  const readiness = calibrateReadinessScore(computedReadiness, archetype)
 
   const pathways = state.selectedCategories.join(', ') || 'EB1A'
   const domainSummary =
@@ -301,18 +325,21 @@ export function buildHeuristicPersonalizedPayload(
     minimumBuildPackage.push('1 counsel-review dossier')
   }
 
-  const projectedMin = Math.min(95, readiness + Math.round(totalAssets * 0.45))
-  const projectedMax = Math.min(98, projectedMin + 6)
+  const projected = calibrateProjectedReadiness(archetype, totalAssets)
+
+  const primaryPathRow = pathway.rows.find((r) => r.pathway === pathway.primary)
+  const primaryGap =
+    (state.gaps ?? []).find((g) => g.severity === 'critical')?.title ??
+    primaryPathRow?.finding ??
+    'Insufficient externally verifiable evidence density'
 
   return {
     baseline: {
       readinessScore: readiness,
       evidenceStrength: readiness >= 65 ? 'Strong' : readiness >= 48 ? 'Moderate' : 'Weak',
       attorneyReadyStatus: readiness >= 78 ? 'Partial' : 'Not Ready',
-      primaryGap:
-        (state.gaps ?? []).find((g) => g.severity === 'critical')?.title ??
-        'Insufficient externally verifiable evidence density',
-      consultingRequirement: `Produce ${totalAssets} new evidence assets (papers, patents, products, etc.) — not collect existing documents — aligned to ${pathways}`,
+      primaryGap,
+      consultingRequirement: `Produce ${totalAssets} new evidence assets (${calibration.label}) — ${pathway.buildFocus} — aligned to ${pathways}`,
       verificationOwner: 'Qualified immigration professional',
     },
     roadmapTable,
@@ -324,14 +351,16 @@ export function buildHeuristicPersonalizedPayload(
       'Final eligibility requires independent professional review under applicable USCIS extraordinary-ability standards.',
     ],
     conclusionSummary: `${p.candidateName}'s petition readiness is estimated at ${readiness}/100 with ${totalAssets} build actions across ${roadmapTable.filter((r) => r.quantityToBuild > 0).length} roadmap areas — customized to this profile and criteria selection.`,
-    projectedReadinessMin: projectedMin,
-    projectedReadinessMax: projectedMax,
-    projectedAttorneyMin: Math.max(70, projectedMin - 4),
-    projectedAttorneyMax: Math.max(75, projectedMax - 3),
+    projectedReadinessMin: projected.min,
+    projectedReadinessMax: projected.max,
+    projectedAttorneyMin: Math.max(70, projected.min - 4),
+    projectedAttorneyMax: Math.max(75, projected.max - 3),
     positioningThemes:
-      p.domains.length > 0
-        ? p.domains.slice(0, 4)
-        : ['Technical leadership', 'Original contribution', 'Field expertise'],
+      positioningThemesAsStrings(p).length > 0
+        ? positioningThemesAsStrings(p)
+        : p.domains.length > 0
+          ? p.domains.slice(0, 4)
+          : ['Technical leadership', 'Original contribution', 'Field expertise'],
     personalizationSource: 'heuristic',
   }
 }

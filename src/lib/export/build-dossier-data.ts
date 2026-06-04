@@ -1,10 +1,7 @@
 import { generateBenchmarkReport } from '../benchmark-report'
 import { extractProfileSignals } from '../benchmark-report/extract-profile'
-import {
-  buildQuantifiedRoadmaps,
-  deriveDemoMetricCounts,
-  extractProfileMetricCounts,
-} from '../quantified-roadmap'
+import { buildQuantifiedRoadmaps, deriveDemoMetricCounts } from '../quantified-roadmap'
+import { buildArchetypeAwareMetricCounts } from '../reference-profile/rm-benchmark-matrix'
 import { formatVisaCategories } from '../assessment-flow'
 import { getDisplayCandidateName } from '../candidate-display'
 import { formatStructuredProfileForLlm } from '../resume-deep-extract'
@@ -27,7 +24,7 @@ export function buildAttorneyDossierData(
   const report = state.benchmarkReport ?? generateBenchmarkReport(state)
 
   const counts =
-    state.quantifiedRoadmap?.current ?? extractProfileMetricCounts(state)
+    state.quantifiedRoadmap?.current ?? buildArchetypeAwareMetricCounts(state, profile)
   const totalCounted = Object.values(counts).reduce((a, b) => a + b, 0)
   const current =
     totalCounted < 4 && state.analysisComplete

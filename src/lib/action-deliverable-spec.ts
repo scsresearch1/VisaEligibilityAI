@@ -1,5 +1,11 @@
 import type { ExtractedProfileSignals } from './benchmark-report/extract-profile'
 import { primaryFieldForDeliverables } from './profile-field-inference'
+import {
+  publicationTitlesForProfile,
+  patentTitlesForProfile,
+  productSpecsForProfile,
+} from './reference-profile/deliverable-titles'
+import { detectProfileArchetype } from './reference-profile/profile-archetype'
 
 export type DeliverableKind =
   | 'publications'
@@ -67,6 +73,12 @@ function isAcademicEngineeringProfile(profile: ExtractedProfileSignals): boolean
 }
 
 function buildPublicationTitles(profile: ExtractedProfileSignals, count: number): string[] {
+  const archetype = detectProfileArchetype(profile)
+  if (archetype !== 'mixed_professional') {
+    const domainTitles = publicationTitlesForProfile(profile, count)
+    if (domainTitles.length >= count) return domainTitles
+  }
+
   const domain = primaryDomain(profile)
   const topic = secondaryTopic(profile)
   const role = profile.workExperience[0]?.title ?? 'faculty researcher'
@@ -89,11 +101,23 @@ function buildPublicationTitles(profile: ExtractedProfileSignals, count: number)
   return templates.slice(0, Math.max(1, Math.min(count, templates.length)))
 }
 
+function buildPatentTitles(profile: ExtractedProfileSignals, count: number): string[] {
+  const archetype = detectProfileArchetype(profile)
+  if (archetype !== 'mixed_professional') {
+    return patentTitlesForProfile(profile, count)
+  }
+  return [
+    `System and Method for ${secondaryTopic(profile).slice(0, 55)} in ${primaryDomain(profile)}`,
+  ].slice(0, count)
+}
+
 function buildPatentOutline(profile: ExtractedProfileSignals): string {
+  const titles = buildPatentTitles(profile, 2)
   const domain = primaryDomain(profile)
   const topic = secondaryTopic(profile)
   const job = profile.workExperience[0]
   return [
+    titles[0] ? `Primary filing concept: ${titles[0]}.` : '',
     `Provisional filing covering a novel method/system in ${domain} derived from ${job ? `${job.title} responsibilities` : 'documented R&D'}.`,
     `Claims map to ${topic.toLowerCase()}; include architecture diagrams, use cases, and differentiation vs. prior art in the same field.`,
     `Supporting exhibits: invention disclosure, reduction-to-practice notes, and expert declaration tying the invention to the candidate’s role.`,
@@ -101,6 +125,16 @@ function buildPatentOutline(profile: ExtractedProfileSignals): string {
 }
 
 function buildProductOutline(profile: ExtractedProfileSignals): string {
+  const specs = productSpecsForProfile(profile, 1)
+  if (specs[0]) {
+    return [
+      `Product: ${specs[0].name}.`,
+      specs[0].technicalImpact,
+      `Financial: ${specs[0].financialImpact}`,
+      `Social: ${specs[0].socialImpact}`,
+    ].join(' ')
+  }
+
   const domain = primaryDomain(profile)
   const topic = secondaryTopic(profile)
   if (isAcademicEngineeringProfile(profile)) {

@@ -14,6 +14,12 @@ import {
 } from './personalized-heuristic'
 import { computeScientificReadinessBaseline, projectReadinessAfterBuild } from './compute-readiness-baseline'
 import { extractProfileSignals } from './extract-profile'
+import {
+  calibrateProjectedReadiness,
+  calibrateReadinessScore,
+  detectProfileArchetype,
+} from '../reference-profile/profile-archetype'
+import { positioningThemesAsStrings } from '../reference-profile/positioning-themes'
 
 const MAX_SCORE_DELTA = 12
 
@@ -148,7 +154,10 @@ export function reconcileBenchmarkPayload(
   const attorneyRow = withOutlines.find((r) => r.id === 'br-attorney')
   if (attorneyRow) attorneyRow.quantityToBuild = 1
 
+  const profile = extractProfileSignals(state.uploads)
   const totalAssets = withOutlines.reduce((s, r) => s + r.quantityToBuild, 0)
+  const archetype = detectProfileArchetype(profile)
+  const calibratedProjected = calibrateProjectedReadiness(archetype, totalAssets)
   const projections = projectReadinessAfterBuild(scientificBaseline, totalAssets)
 
   const buildPlan = buildEvidenceBuildPlan(state)
@@ -163,10 +172,13 @@ export function reconcileBenchmarkPayload(
         : withOutlines.filter((r) => r.quantityToBuild > 0).map((r) => `${r.quantityToBuild} × ${r.area}`)
 
   const baseline = {
-    readinessScore: clamp(
-      scientificBaseline.readinessScore * 0.7 + llm.baseline.readinessScore * 0.3,
-      scientificBaseline.readinessScore - 8,
-      scientificBaseline.readinessScore + 8,
+    readinessScore: calibrateReadinessScore(
+      clamp(
+        scientificBaseline.readinessScore * 0.7 + llm.baseline.readinessScore * 0.3,
+        scientificBaseline.readinessScore - 8,
+        scientificBaseline.readinessScore + 8,
+      ),
+      archetype,
     ),
     evidenceStrength: scientificBaseline.evidenceStrength,
     attorneyReadyStatus: scientificBaseline.attorneyReadyStatus,
@@ -175,11 +187,14 @@ export function reconcileBenchmarkPayload(
     verificationOwner: 'Qualified immigration professional',
   }
 
-  const profile = extractProfileSignals(state.uploads)
+  const profileThemes = positioningThemesAsStrings(profile)
   const themes =
-    llm.positioningThemes.length > 0 && !llm.positioningThemes.some((t) => /healthcare|vaccine/i.test(t))
+    llm.positioningThemes.length > 0 &&
+    !llm.positioningThemes.some((t) => /healthcare vaccine|template/i.test(t))
       ? llm.positioningThemes
-      : profile.domains.slice(0, 4)
+      : profileThemes.length > 0
+        ? profileThemes
+        : profile.domains.slice(0, 4)
 
   return {
     baseline,
@@ -193,8 +208,8 @@ export function reconcileBenchmarkPayload(
       llm.conclusionSummary.length > 80
         ? llm.conclusionSummary
         : `${profile.candidateName}: readiness ${baseline.readinessScore}/100 with ${totalAssets} build assets across ${withOutlines.filter((r) => r.quantityToBuild > 0).length} evidence areas — customized to ${profile.domains[0] ?? 'profile'}.`,
-    projectedReadinessMin: projections.min,
-    projectedReadinessMax: projections.max,
+    projectedReadinessMin: Math.max(projections.min, calibratedProjected.min),
+    projectedReadinessMax: Math.max(projections.max, calibratedProjected.max),
     projectedAttorneyMin: projections.attorneyMin,
     projectedAttorneyMax: projections.attorneyMax,
     positioningThemes: themes,

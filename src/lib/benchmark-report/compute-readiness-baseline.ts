@@ -2,6 +2,11 @@ import type { AssessmentState } from '../../types/assessment'
 import type { BenchmarkBaseline } from '../../types/benchmark-report'
 import { extractProfileSignals } from './extract-profile'
 import { scoreAllCriteria } from '../scientific-assessment/score-criterion'
+import {
+  calibrateReadinessScore,
+  detectProfileArchetype,
+  getArchetypeCalibration,
+} from '../reference-profile/profile-archetype'
 const STRENGTH_SCORE: Record<string, number> = {
   strong: 88,
   moderate: 58,
@@ -37,10 +42,12 @@ export function computeScientificReadinessBaseline(state: AssessmentState): Benc
         state.criterionResults.length
       : 0
 
-  const readinessScore = clamp(
-    avgRule * 0.45 + avgEvidence * 0.45 + criterionPct * 100 * 0.1,
-    28,
-    78,
+  const archetype = detectProfileArchetype(profile)
+  const { readinessBand } = getArchetypeCalibration(archetype)
+  const rawReadiness = avgRule * 0.45 + avgEvidence * 0.45 + criterionPct * 100 * 0.1
+  const readinessScore = calibrateReadinessScore(
+    clamp(rawReadiness, readinessBand.min - 4, readinessBand.max + 6),
+    archetype,
   )
 
   const criticalGaps = state.gaps.filter((g) => g.severity === 'critical').length

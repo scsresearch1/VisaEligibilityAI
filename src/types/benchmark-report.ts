@@ -49,6 +49,27 @@ export interface BenchmarkTimelinePhase {
   outputs: string[]
 }
 
+export interface PathwayBaselineRow {
+  pathway: import('./assessment').VisaCategory
+  readinessScore: number
+  status: string
+  finding: string
+}
+
+export interface PathwayRecommendationSnapshot {
+  primary: import('./assessment').VisaCategory
+  secondary?: import('./assessment').VisaCategory
+  notRecommended?: import('./assessment').VisaCategory[]
+  filingStatus: string
+  buildFocus: string
+  rows: PathwayBaselineRow[]
+}
+
+export interface PositioningThemeRow {
+  theme: string
+  interpretation: string
+}
+
 export interface BenchmarkConclusion {
   summary: string
   currentReadiness: number
@@ -60,6 +81,9 @@ export interface BenchmarkConclusion {
   executionOwner: string
   verificationOwner: string
   positioningThemes: string[]
+  positioningThemeRows?: PositioningThemeRow[]
+  pathwayRecommendation?: PathwayRecommendationSnapshot
+  profileArchetype?: string
 }
 
 export interface BenchmarkReport {

@@ -90,9 +90,58 @@ export function downloadCombinedAttorneyDossierPdf(
   })
   y = getFinalTableY(doc, y + 24)
 
-  if (report.conclusion.positioningThemes.length > 0) {
+  if (report.conclusion.positioningThemeRows?.length) {
+    y = writeSectionTitle(doc, y, 'Strategic positioning themes')
+    y = tableStartY(doc, y)
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      tableWidth: contentW,
+      head: [['Theme', 'Interpretation']],
+      body: report.conclusion.positioningThemeRows.map((t) => [
+        t.theme,
+        t.interpretation.slice(0, 120),
+      ]),
+      styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+      headStyles: PDF_TABLE_HEAD,
+      theme: 'striped',
+    })
+    y = getFinalTableY(doc, y + 20)
+  } else if (report.conclusion.positioningThemes.length > 0) {
     y = writeSectionTitle(doc, y, 'Strategic positioning themes')
     y = writeBullets(doc, y, report.conclusion.positioningThemes)
+  }
+
+  if (report.conclusion.profileArchetype) {
+    y = writeParagraphs(doc, y, [`Profile archetype: ${report.conclusion.profileArchetype}`])
+  }
+
+  if (report.conclusion.pathwayRecommendation) {
+    const pr = report.conclusion.pathwayRecommendation
+    y = writeSectionTitle(doc, y, 'Pathway recommendation snapshot')
+    y = writeHighlightBox(doc, y, 'Primary / secondary pathways', [
+      `Primary recommended: ${pr.primary}${pr.secondary ? ` · Secondary: ${pr.secondary}` : ''}`,
+      `Filing status: ${pr.filingStatus}`,
+      pr.notRecommended?.length ? `Not recommended (selected review): ${pr.notRecommended.join(', ')}` : '',
+      `Build focus: ${pr.buildFocus}`,
+    ].filter(Boolean))
+    y = tableStartY(doc, y)
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      tableWidth: contentW,
+      head: [['Pathway', 'Readiness', 'Status', 'Finding']],
+      body: pr.rows.map((r) => [
+        r.pathway,
+        `${r.readinessScore}/100`,
+        r.status,
+        r.finding.slice(0, 90),
+      ]),
+      styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+      headStyles: PDF_TABLE_HEAD,
+      theme: 'grid',
+    })
+    y = getFinalTableY(doc, y + 24)
   }
 
   doc.addPage()
@@ -106,7 +155,28 @@ export function downloadCombinedAttorneyDossierPdf(
   y = writeSectionTitle(doc, y, 'I.1 Corrected Evaluation Logic')
   y = writeParagraphs(doc, y, enrichment.evaluationLogicLegal)
 
-  y = writeSectionTitle(doc, y, 'I.2 Current EB-1 Baseline Assessment')
+  if (report.conclusion.pathwayRecommendation?.rows.length) {
+    y = writeSectionTitle(doc, y, 'I.1 Current EB-1 Baseline Assessment (per pathway)')
+    y = tableStartY(doc, y)
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      tableWidth: contentW,
+      head: [['Pathway', 'Readiness', 'Status', 'Finding']],
+      body: report.conclusion.pathwayRecommendation.rows.map((r) => [
+        r.pathway,
+        `${r.readinessScore}/100`,
+        r.status,
+        r.finding.slice(0, 100),
+      ]),
+      styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+      headStyles: PDF_TABLE_HEAD,
+      theme: 'grid',
+    })
+    y = getFinalTableY(doc, y + 28)
+  }
+
+  y = writeSectionTitle(doc, y, 'I.2 Aggregate readiness & consulting baseline')
   y = tableStartY(doc, y)
   autoTable(doc, {
     startY: y,
@@ -378,15 +448,26 @@ export function downloadCombinedAttorneyDossierPdf(
     y = getFinalTableY(doc, y + 20)
   }
 
-  y = writeSectionTitle(doc, y, 'III.3 Criterion-level status')
+  y = writeSectionTitle(doc, y, 'III.3 Criterion-level status (EB-1A grid)')
+  const STRENGTH_NUM: Record<string, number> = {
+    strong: 88,
+    moderate: 58,
+    weak: 38,
+    attorney_review: 52,
+    unsupported: 22,
+    missing: 8,
+  }
   const criteriaRows = state.criterionResults.map((r) => {
     const c = VISA_CRITERIA.find((x) => x.id === r.criterionId)
+    const ev = state.evidenceItems.find((e) => e.criterionId === r.criterionId)
+    const score = ev ? STRENGTH_NUM[ev.strength] ?? 20 : 20
     return [
       c?.category ?? '—',
       c?.code ?? r.criterionId,
-      c?.title?.slice(0, 45) ?? r.criterionId,
+      c?.title?.slice(0, 40) ?? r.criterionId,
       r.status,
-      r.strength,
+      `${score}/100`,
+      r.summary.slice(0, 70),
     ]
   })
   if (criteriaRows.length > 0) {
@@ -395,7 +476,7 @@ export function downloadCombinedAttorneyDossierPdf(
       startY: y,
       margin: { left: margin, right: margin },
       tableWidth: contentW,
-      head: [['Pathway', 'Code', 'Criterion', 'Status', 'Strength']],
+      head: [['Pathway', 'Code', 'Criterion', 'Status', 'Strength', 'Finding']],
       body: criteriaRows,
       styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
       headStyles: PDF_TABLE_HEAD,
